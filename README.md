@@ -5,12 +5,12 @@
 ---
 ## Features
 * Provides intuitive merge, delete (both one-sided and two-sided), and undo of Diffs using `<Left>`, `<Right>`, `<Delete>`, `<S-Delete>`, `<Backspace>` keys.
-* Supports navigation within a Diff (Start, End of a Diff) with `<PageUp>`, `<PageDown>` keys
+* Supports navigation within a Diff (Start, End of a Diff) with `<PageUp>`, `<PageDown>` keys.
 * Supports navigation between Diffs (First, Last, Previous, Next) with `<Home>`, `<End>`, `<Up>`, `<Down>` keys.
 * The keys are context aware; for example, regardless of whether the cursor is in the left or right window, `<Right>` will merge the Diff from the left window to the right. Similarly, `<Backspace>` undoes the merges and deletes across the two windows, independent of whether the window is left or right. `<Backspace>` atomically undoes two-sided deletes performed with `<S-Delete>`.
-* Handles all possible configurations of Diffs. When the cursor line represents multiple Diffs (previous filler, change/added or EOF filler), the user is prompted to determine the target Diff for merge/delete operations.
+* Handles all possible configurations of Diffs. When the cursor line represents multiple Diffs (previous filler, changed/added or EOF filler), the user is prompted to identify the target Diff for merge/delete operations.
 * Automatically adapts to diffopt+=linematch:{n}, handling both grouped and split diffs transparently.
-* The movement keys are enabled in visual mode as well. For example, one can select (visual) a Diff with `<PageUp>V<PageDown>`
+* The movement keys are enabled in visual mode as well; for example, one can select (visual) a Diff with `<PageUp>V<PageDown>`
 
 ---
 ## Installation
@@ -34,19 +34,19 @@ source /path/to/EasyDiff.vim
 
 | Key | Action |
 | :--- | :--- |
-| `<Right>` | Merge current Diff from the **left** window to the **right** window |
-| `<Left>` | Merge current Diff from the **right** window to the **left** window |
-| `<Delete>` | Delete the current Diff in the current window |
-| `<S-Delete>` | Delete the current Diff in both windows |
-| `<Backspace>` | Undo the last merge or delete |
-| `<Home>` | Jump to the **first** Diff |
-| `<End>` | Jump to the **last** Diff |
-| `<Up>` | Jump to the **previous** Diff *(accepts count)* |
-| `<Down>` | Jump to the **next** Diff *(accepts count)* |
-| `<PageUp>` | Jump to the **start** of the current Diff |
-| `<PageDown>` | Jump to the **end** of the current Diff |
-| `<S-Home>` | Move cursor to the other window |
-| `<F1>` | Print help message |
+| `<Right>` | Merge current Diff from the **left** window to the **right** window *(normal mode)* |
+| `<Left>` | Merge current Diff from the **right** window to the **left** window *(normal mode)* |
+| `<Delete>` | Delete the current Diff in the current window *(normal mode)* |
+| `<S-Delete>` | Delete the current Diff in both windows *(normal mode)* |
+| `<Backspace>` | Undo the last merge or delete *(normal mode)* |
+| `<PageUp>` | Jump to the **start** of the current Diff *(normal and visual modes)* |
+| `<PageDown>` | Jump to the **end** of the current Diff *(normal and visual modes)* |
+| `<Home>` | Jump to the **first** Diff *(normal and visual modes)* |
+| `<End>` | Jump to the **last** Diff *(normal and visual modes)* |
+| `<Up>` | Jump to the **previous** Diff *(accepts count)* *(normal and visual modes)* |
+| `<Down>` | Jump to the **next** Diff *(accepts count)* *(normal and visual modes)* |
+| `<S-Home>` | Move cursor to the other window *(normal mode)* |
+| `<F1>` | Print help message *(normal mode)* |
 
 > **Notes on Bindings:**
 > * These keybindings are restricted to the two diffed buffers.

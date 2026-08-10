@@ -10,27 +10,28 @@
 "   intuitive cursor-key interface, simplifying navigation within and between
 "   diffs and making repetitive merge, delete, and undo operations faster.
 " Requirements: {{{1
-"   - Tested with Vim 9.2 and Neovim 0.11.6. Earlier versions may work, but are
-"     not supported.
+"   - Requires Vim 9.2 or Neovim 0.11.6 (the tested versions). EasyDiff might
+"     work in lower versions, but any issues found in lower versions are out of
+"     scope of this plugin.
 "   - Requires exactly two vertically split windows, both in diff mode. The
 "     files may be opened directly using vim -d, nvim -d, or vimdiff, or by
 "     manually invoking :diffthis in both vertical splits.
 "   - Requires the default diff options `set cursorbind` and
 "     `set diffopt+=filler` to remain unmodified.
 " Key Bindings: {{{1
-"   <Right>	- Merge Diff from the left window to the Right window
-"   <Left>	- Merge Diff from the right window to the Left window
-"   <Delete>	- Delete the Diff in the current window
-"   <S-Delete>	- Delete the Diff in both windows
-"   <Backspace>	- Undo the last Merge or Delete
-"   <Home>	- Jump to the first Diff
-"   <End>		- Jump to the last Diff
-"   <Up>		- Jump to the previous Diff (takes count)
-"   <Down>	- Jump to the next Diff (takes count)
-"   <PageUp>	- Jump to the start of the current Diff
-"   <PageDown>	- Jump to the end of the current Diff
-"   <S-Home>	- Move cursor to the other window
-"   <F1>		- Print this help message
+"   <Right>	- Merge Diff from the left window to the Right window (normal mode)
+"   <Left>	- Merge Diff from the right window to the Left window (normal mode)
+"   <Delete>	- Delete the Diff in the current window (normal mode)
+"   <S-Delete>	- Delete the Diff in both windows (normal mode)
+"   <Backspace>	- Undo the last Merge or Delete (normal mode)
+"   <PageUp>	- Jump to the start of the current Diff (normal and visual modes)
+"   <PageDown>	- Jump to the end of the current Diff (normal and visual modes)
+"   <Home>	- Jump to the first Diff (normal and visual modes)
+"   <End>		- Jump to the last Diff (normal and visual modes)
+"   <Up>		- Jump to the previous Diff (accepts count) (normal and visual modes)
+"   <Down>	- Jump to the next Diff (accepts count) (normal and visual modes)
+"   <S-Home>	- Move cursor to the other window (normal mode)
+"   <F1>		- Print this help message (normal mode)
 "   Notes: {{{2
 "   - The key bindings are restricted to the two diff'ed buffers. Movement keys
 "     are enabled for visual mode as well.
@@ -117,6 +118,9 @@
 "     diff_filler(curline+1) > 0 (equal to the number of lines in the 'EOF
 "     Filler'). NOTE1: In Vim/Neovim help there are some hints, but no explicit
 "     mention, of this special case.
+"     See:
+"     https://github.com/vim/vim/issues/20990
+"     https://github.com/neovim/neovim/issues/41256
 "
 "   - If 'linematch:{n}' is present in diffopt, Vim/Neovim consider each
 "     Changed, Added or Filler set, as a separate Diff, whether or not the sets
@@ -133,18 +137,18 @@
 "   - The command 'dp' merges 'Current Diff' *to* the other window
 "   - The command 'do' merges 'Current Diff' *from* the other window
 "
-"   Note that there cannot be a curline following the 'EOF Filler'. So if the
+"   As defined there cannot be a curline following the 'EOF Filler'. So if the
 "   'EOF Filler' is a standalone Diff (linematch is enabled or the preceding
 "   line is Unchanged), there is no line that represents the 'EOF Filler' and
 "   the *only* way to operate on is by performing the opposite operation on the
 "   corresponding Added set in the other window.
 "
-"   Further under 'linematch:{n}' in diffopt, which treats each of
-"   Added/Changed/Filler sets as a separate Diff, if curline is the first line
-"   of a Added(or Changed) set, but if the curline also follows a Filler, there
-"   is an ambiguity about the set (whether Filler or Added(or Changed)) to which
-"   a given operation applies. So the user is prompted to choose, and if the
-"   user chooses the Filler, then again the switched operation described in the
+"   Further under 'linematch:{n}' in diffopt, which treats each of Added,
+"   Changed, Filler sets as a separate Diff, if curline is the first line of a
+"   Added(or Changed) set, but if the curline also follows a Filler, there is an
+"   ambiguity about the set (whether Filler or Added(or Changed)) to which a
+"   given operation applies. So the user is prompted to choose, and if the user
+"   chooses the Filler, then again the switched operation described in the
 "   previous paragraph is performed.
 "
 " - Vim/Neovim diff presentation invariants:
@@ -207,19 +211,21 @@
 "   sync. So a subsequent message might disappear when an auto diffupdate/redraw
 "   syncs the diff. To workaround, proactively diffupdate after edits/undo's,
 "   before a echo/echomsg.
-" - Workaround6: For diffupdate bug: When linematch is enabled, delete or undo
-"   followed by diffupdate doesn't restore (contrary to what ':h diffupdate'
-"   says) the correspondence between the cursors in the two windows. For
-"   example, consider C1-F-C3 in W1, and C2-A-C4 in W2. When C1 is deleted, it
-"   results in F'-C3 in W1 and A'-C4 in W2. But while the cursor moves to C3 in
-"   W1 (correctly), it continues to stay in C2 that is part of A' in W2, inspite
-"   of diffupdate. The workaround is to toggle the cursor using kj or jk, which
-"   brings the cursor to C4 in W2. But at least the above diffupdate behavior is
-"   defensible, as F' (represented by C3) still corresponds to C2. Now consider
-"   this: An undo is performed, causing C1 to reappear in the old configuration,
-"   and the cursor in W1 back in C1. But now in spite of diffupdate, cursor
-"   stays in C4 in W2, which is not defensible as there is now no correspondence
-"   between C1 and C4.
+" - Workaround6: For bug in Vim 9.2.390 and Neovim 0.12.4: When linematch is
+"   enabled, delete or undo followed by diffupdate doesn't restore (contrary to
+"   what ':h diffupdate' says) the correspondence between the cursors in the two
+"   windows. For example, consider C1-F-C3 in W1, and C2-A-C4 in W2. When C1 is
+"   deleted, it results in F'-C3 in W1 and A'-C4 in W2. But while the cursor
+"   moves to C3 in W1 (correctly), it continues to stay in C2 that is part of A'
+"   in W2, inspite of diffupdate. But this is still legal as C3 represents F'
+"   and thus corresponds to C2. The workaround is to toggle the cursor using kj
+"   or jk, which brings the cursor to C4 in W2. Now consider this: An undo is
+"   performed, causing C1 to reappear in the old configuration, and the cursor
+"   in W1 back in C1. But now in spite of diffupdate, cursor stays in C4 in W2,
+"   which is incorrect as there is now no correspondence between C1 and C4.
+"   See:
+"   https://github.com/vim/vim/issues/20982
+"   https://github.com/neovim/neovim/issues/41250
 " - NOTE2: Messages from 'do'/'dp' like 'W10: Warning: Changing a readonly file'
 "   aren't exceptions. But when invoked from within functions, they are printed
 "   with Vim's function context which we don't need. So redir the messages, with
@@ -266,7 +272,7 @@ function! s:ShowHelp() abort
 	" Find the markers.
 	for l:i in range(len(l:lines))
 		if l:start < 0 && l:lines[l:i] =~# '^" Introduction:'
-			let l:start = l:i
+			let l:start = l:i+1
 		elseif l:start >= 0 && l:lines[l:i] =~# '^" Implementation Notes'
 			let l:end = l:i
 			break
@@ -278,8 +284,11 @@ function! s:ShowHelp() abort
 		return
 	endif
 
-	" Extract, remove leading comment prefix, and remove trailing {{{ fold marker
-	let l:help = map(copy(l:lines[l:start : l:end - 1]),
+	let l:title = 'EasyDiff on ' . s:editor_version
+	" Initialize with title and a decorator
+	let l:help = [l:title, substitute(l:title, '.', '‾', 'g')]
+	" Add help text after removing leading comment prefix, and trailing {{{ fold marker
+	let l:help += map(copy(l:lines[l:start : l:end - 1]),
 				\ {_, v -> substitute(v, '^\s*"\s\|\s*{{{\d\+.*$', '', 'g')})
 	echo join(l:help, "\n")
 endfunction
@@ -689,7 +698,7 @@ function! s:DeleteDiffInBothWindows() abort
 		endif
 		let action = choice == 1 ? prev_diff : (choice == 2 ? '' : next_diff)
 	else " !filler_before && !changed && !filler_after
-		call s:Message('No Diff at cursor position to Merge')
+		call s:Message('No Diff at cursor position to Delete')
 		return v:false
 	endif
 
@@ -848,46 +857,6 @@ function! s:Undo() abort
 	return v:true
 endfunction
 
-" JumpToFirstDiff {{{1
-" Helper for s:HomeAction() and s:DiffModeSetup()
-" Jump to the first line of the first Diff
-" verbose(boolean): Whether to issue a helpful message
-function! s:JumpToFirstDiff(verbose) abort
-	let oldline = line('.')
-	" To go to the first line of the first Diff, we go to the first line,
-	" next Diff, and then previous Diff. This accounts for the case where
-	" the cursor is already inside the first Diff.
-	silent! normal! gg]c[c
-	if a:verbose
-		if oldline == line('.')
-			call s:Message('Already at first Diff')
-		else
-			echo ''
-		endif
-	endif
-	return v:true
-endfunction
-
-" JumpToLastDiff {{{1
-" Helper for s:EndAction()
-" Jump to the first line of the last Diff.
-" verbose(boolean): Whether to issue a helpful message
-function! s:JumpToLastDiff(verbose) abort
-	let oldline = line('.')
-	" To go to the first line of the last Diff, we go to the last line,
-	" previous Diff, and then next Diff. This accounts for the case where
-	" the cursor is already inside the last Diff.
-	silent! normal! G[c]c
-	if a:verbose
-		if oldline == line('.')
-			call s:Message('Already at last Diff')
-		else
-			echo ''
-		endif
-	endif
-	return v:true
-endfunction
-
 " JumpToDiffStart {{{1
 " Also helper for various functions
 " Jump to the first line of the current Diff
@@ -972,14 +941,54 @@ function! s:JumpToDiffEnd(verbose) abort
 
 		call setpos('.', pos)
 		" See 'Implementation Notes' Workaround1. Here if pos had
-		" changed kj is legal; otherwise the workaround isn't needed
-		" anyway.
+		" changed, k is legal and kj succeeds; otherwise the workaround
+		" isn't needed anyway.
 		silent! normal! kj
 	endif
 
 	if a:verbose
 		if pos[1] == origin
 			call s:Message('Already at Diff end')
+		else
+			echo ''
+		endif
+	endif
+	return v:true
+endfunction
+
+" JumpToFirstDiff {{{1
+" Helper for s:HomeAction() and s:DiffModeSetup()
+" Jump to the first line of the first Diff
+" verbose(boolean): Whether to issue a helpful message
+function! s:JumpToFirstDiff(verbose) abort
+	let oldline = line('.')
+	" To go to the first line of the first Diff, we go to the first line,
+	" next Diff, and then previous Diff. This accounts for the case where
+	" the cursor is already inside the first Diff.
+	silent! normal! gg]c[c
+	if a:verbose
+		if oldline == line('.')
+			call s:Message('Already at first Diff')
+		else
+			echo ''
+		endif
+	endif
+	return v:true
+endfunction
+
+" JumpToLastDiff {{{1
+" Helper for s:EndAction()
+" Jump to the first line of the last Diff.
+" verbose(boolean): Whether to issue a helpful message
+function! s:JumpToLastDiff(verbose) abort
+	let oldline = line('.')
+	" To go to the first line of the last Diff, we go to the last line,
+	" previous Diff, and then next Diff. This accounts for the case where
+	" the cursor is already inside the last Diff.
+	silent! normal! G[c]c
+	if a:verbose
+		if oldline == line('.')
+			call s:Message('Already at last Diff')
 		else
 			echo ''
 		endif
@@ -1036,6 +1045,39 @@ function! s:DeleteAction() abort
 	endif
 endfunction
 
+
+" JumpToOtherWindow {{{1
+" Helper for HomeAction()
+function! s:JumpToOtherWindow() abort
+	if !s:DiffStateValid()
+		return v:false
+	endif
+	" Force exact line correspondence
+	call s:Workaround6_diffupdate(win_getid())
+	" if curline follows a Filler, after switching to the other window move
+	" the cursor to the corresponding preceding Added. This is a legal
+	" correspondence that also prevents StayOnDiff() from needlessly moving
+	" the cursor.
+	let filler_before = s:RepresentsFillerBefore(line("."))
+	noautocmd wincmd w
+	if filler_before
+		silent! normal! k
+	endif
+	call s:StayOnDiff()
+	echo 'Changed focus to ' . (winnr() == 1 ? 'left' : 'right') . ' window'
+	return v:true
+endfunction
+
+" HomeAction {{{1
+" Overloaded <Home> with preceding count
+function! s:HomeAction() abort
+	if v:count1 == 1
+		" v:count1 = 1 (no count) jumps to the first Diff
+		return s:JumpToFirstDiff(v:true)
+	else
+		return s:JumpToOtherWindow()
+	endif
+endfunction
 
 " EndAction {{{1
 " Overloaded <End> with preceding count
@@ -1098,39 +1140,6 @@ function! s:EndAction() abort
 	return v:true
 endfunction
 
-" JumpToOtherWindow {{{1
-" Helper for HomeAction()
-function! s:JumpToOtherWindow() abort
-	if !s:DiffStateValid()
-		return v:false
-	endif
-	" Force exact line correspondence
-	call s:Workaround6_diffupdate(win_getid())
-	" if curline follows a Filler, after switching to the other window move
-	" the cursor to the corresponding preceding Added. This is a legal
-	" correspondence that also prevents StayOnDiff() from needlessly moving
-	" the cursor.
-	let filler_before = s:RepresentsFillerBefore(line("."))
-	noautocmd wincmd w
-	if filler_before
-		silent! normal! k
-	endif
-	call s:StayOnDiff()
-	echo 'Changed focus to ' . (winnr() == 1 ? 'left' : 'right') . ' window'
-	return v:true
-endfunction
-
-" HomeAction {{{1
-" Overloaded <Home> with preceding count
-function! s:HomeAction() abort
-	if v:count1 == 1
-		" v:count1 = 1 (no count) jumps to the first Diff
-		return s:JumpToFirstDiff(v:true)
-	else
-		return s:JumpToOtherWindow()
-	endif
-endfunction
-
 " DiffModeSetup {{{1
 " Sets up EasyDiff mappings in diff windows and jumps to start of first Diff.
 function! s:DiffModeSetup() abort
@@ -1162,12 +1171,12 @@ function! s:DiffModeSetup() abort
 	nnoremap <buffer> <Del> <Cmd>call <SID>DeleteAction()<CR>|	"Overloaded using count
 	nmap     <buffer> <S-Del> 2<Del>|				"Convenient if terminal supports <S-Del>
 	nnoremap <buffer> <BS> <Cmd>call <SID>Undo()<CR>
+	noremap <buffer> <PageUp> <Cmd>call <SID>JumpToDiffStart(v:true)<CR>
+	noremap <buffer> <PageDown> <Cmd>call <SID>JumpToDiffEnd(v:true)<CR>
 	noremap <buffer> <Home> <Cmd>call <SID>HomeAction()<CR>|	"Overloaded using count
 	map     <buffer> <S-Home> 2<Home>|				"Convenient if terminal supports <S-Home>
 	noremap <buffer> <End> <Cmd>call <SID>EndAction()<CR>|		"Overloaded using count
 	map     <buffer> <S-End> 2<End>|				"Convenient if terminal supports <S-End>
-	noremap <buffer> <PageUp> <Cmd>call <SID>JumpToDiffStart(v:true)<CR>
-	noremap <buffer> <PageDown> <Cmd>call <SID>JumpToDiffEnd(v:true)<CR>
 	noremap <buffer> <Up> <Cmd>call <SID>JumpToPreviousDiff(v:true)<CR>|	"Accepts count
 	noremap <buffer> <Down> <Cmd>call <SID>JumpToNextDiff(v:true)<CR>|	"Accepts count
 	nnoremap <buffer> <F1> <Cmd>call <SID>ShowHelp()<CR>
