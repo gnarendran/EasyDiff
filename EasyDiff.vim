@@ -327,24 +327,41 @@ endfunction
 " Workaround6_diffupdate {{{1
 " See 'Implementation Notes' Workaround6
 " This function is also used in other contexts to enforce line correspondence.
-" winid: id of the edited window
-function! s:Workaround6_diffupdate(winid) abort
-	" a:winid is where the edit happened, and so the source of truth of the
-	" cursor position.
-	if s:WinEval(a:winid, 'line("$")') > 1
-		" At least two lines present: Taking advantage of cursorbind, by
-		" toggling the cursor vertically, we can bring the cursor to the
-		" corresponding line in the other window.
-		call win_execute(a:winid, 'noautocmd execute "silent! normal! " . (line(".") == 1 ? "jk" : "kj")')
-	elseif s:WinEval(a:winid, '!empty(getline(1))')
-		" There is exactly one line: cursor cannot of course vertically
-		" move, so we use the number of preceding fillers to decide the
-		" cursor position in the other window.
-		let otherwinid = a:winid == s:leftwinid ? s:rightwinid : s:leftwinid
-		let l:otherline = s:WinEval(a:winid, 'diff_filler(1)') + 1
-		call win_execute(otherwinid, 'noautocmd silent! normal! ' . l:otherline . 'G')
+" winid (optional): id of the edited window; defaults to id of current window
+" Even though win_execute could be used on winid without distingushing between
+" current and other window, we do make that distinction as mostly current window
+" is the target, where we can avoid the overhead of win_execute.
+function! s:Workaround6_diffupdate(...) abort
+	if a:0 == 0 || a:1 == win_getid()
+		" current window decides the cursor position
+		if line("$") > 1
+			" At least two lines present: Taking advantage of
+			" cursorbind, by toggling the cursor vertically, bring
+			" cursor to the corresponding line in the other window.
+			execute 'noautocmd silent normal! ' . (line(".") == 1 ? "jk" : "kj")
+		elseif !empty(getline(1))
+			" There is exactly one line: cursor cannot of course
+			" vertically move, so use the number of preceding
+			" fillers to decide the cursor position in the other
+			" window.
+			let otherwinid = win_getid(winnr() == 1 ? 2 : 1)
+			let curline = diff_filler(1) + 1
+			call win_execute(otherwinid, 'noautocmd silent normal! ' . curline . 'G')
+		endif
+		" if there are no lines, we consider there is no correpondence.
+		return
 	endif
-	" if a:winid has no lines at all we consider there is no correpondence.
+
+	" otherwinid is the source of truth of the cursor position. The logic
+	" is similar to the above, but with roles of current and other window
+	" reversed.
+	let otherwinid = a:1
+	if s:WinEval(otherwinid, 'line("$")') > 1
+		call win_execute(otherwinid, 'noautocmd execute "silent normal! " . (line(".") == 1 ? "jk" : "kj")')
+	elseif s:WinEval(otherwinid, '!empty(getline(1))')
+		let curline = s:WinEval(otherwinid, 'diff_filler(1)') + 1
+		execute 'noautocmd silent normal! ' . curline . 'G'
+	endif
 endfunction
 
 " Message {{{1
@@ -474,6 +491,15 @@ function! s:RepresentsFillerAfter(curline) abort
 	return a:curline == line('$') && diff_filler(a:curline + 1) > 0
 endfunction
 
+
+" RepresentsDiff {{{1
+" Helper for various functions
+" Checks if a:curline represents a valid Diff
+" curline: The line to be checked.
+function! s:RepresentsDiff(curline) abort
+	return s:RepresentsChanged(a:curline) || s:RepresentsFillerBefore(a:curline) || s:RepresentsFillerAfter(a:curline)
+endfunction
+
 " StayOnDiff {{{1
 " Helper for various functions
 " In the current window, try to keep cursor on a Diff (ie. jump to next Diff if
@@ -488,7 +514,7 @@ function! s:StayOnDiff() abort
 	" Before diff_hlID() is used by s:RepresentsChanged() etc., execute
 	" Workaround4.
 	call s:Workaround4_diff_hlID(otherwinid)
-	if !s:RepresentsChanged(curline) && !s:RepresentsFillerBefore(curline) && !s:RepresentsFillerAfter(curline)
+	if !s:RepresentsDiff(curline)
 		" cursor not on a Diff, so move it to the next Diff.
 		silent! normal! ]c
 		if curline == line('.')
@@ -545,15 +571,15 @@ function! s:MergeDiff(right) abort
 	" Changed, or next Added. To be deterministic, force exact line
 	" correspondence using Workaround6_diffupdate(), even though here we are
 	" really not working around an unexpected behavior.
-	call s:Workaround6_diffupdate(curwinid)
+	call s:Workaround6_diffupdate()
 
 	" Below, action represents the initial command to be executed on the
 	" target window. It is empty for the current window. For the other
-	" window, it is '[c' to go to the previous Diff(Added), and 'G' to go to
+	" window, it is 'k' to go to the previous Diff(Added), and 'j' to go to
 	" the last Diff(Added). We need to set action for the 8 combinations of
 	" states, of filler_before, changed and filler_after.
-	let prev_diff = '[c'
-	let next_diff = 'G'
+	let prev_diff = 'k'
+	let next_diff = 'j'
 
 	if (!filler_before && changed && !filler_after) 
 				\ || (filler_before && !changed && !filler_after)
@@ -602,20 +628,20 @@ function! s:MergeDiff(right) abort
 	if empty(action)
 		" Operation can be performed from the current window
 		let targetwinid = curwinid
-		let action = 'normal! ' . (a:right ? (curwinnr == 1 ? 'dp' : 'do') : (curwinnr == 1 ? 'do' : 'dp'))
+		let action = 'noautocmd silent normal! ' . (a:right ? (curwinnr == 1 ? 'dp' : 'do') : (curwinnr == 1 ? 'do' : 'dp'))
 	else
 		" Opposite operation has to be performed from the other window
 		let targetwinid = otherwinid
-		let action = 'noautocmd normal! ' . action . (a:right ? (curwinnr == 1 ? 'do' : 'dp') : (curwinnr == 1 ? 'dp' : 'do'))
+		let action = 'noautocmd silent normal! ' . action . (a:right ? (curwinnr == 1 ? 'do' : 'dp') : (curwinnr == 1 ? 'dp' : 'do'))
 	endif
 
 	" See 'Implementation Notes' NOTE2
 	let l:msg = ''
 	redir => l:msg
 	if targetwinid == curwinid
-		silent! execute action
+		execute action
 	else
-		silent! call win_execute(targetwinid, action)
+		call win_execute(targetwinid, action)
 	endif
 	redir END
 	
@@ -652,16 +678,16 @@ function! s:DeleteDiffInBothWindows() abort
 	" Changed, or next Added. To be deterministic, force exact line
 	" correspondence using Workaround6_diffupdate(), even though here we are
 	" really not working around an unexpected behavior.
-	call s:Workaround6_diffupdate(curwinid)
+	call s:Workaround6_diffupdate()
 
 	" Below, action represents the initial command to be executed on the
 	" other window. It is empty for the current window. For the other
-	" window, it is '[c' to go to the previous Diff(Added), and 'G' to go to
+	" window, it is 'k' to go to the previous Diff(Added), and 'j' to go to
 	" the last Diff(Added). By prompting the user if need be, we need to set
 	" action for the 8 combinations of states, of filler_before, changed and
 	" filler_after.
-	let prev_diff = '[c'
-	let next_diff = 'G'
+	let prev_diff = 'k'
+	let next_diff = 'j'
 
 	if !filler_before && changed && !filler_after
 		let action = ''
@@ -732,8 +758,8 @@ function! s:DeleteDiffInBothWindows() abort
 			let end2 = -1
 		endif
 
-		let cmd1 = 'silent! ' . start1 . ',' . end1 . 'delete'
-		let cmd2 = start2 > end2 ? '' : printf('noautocmd silent! %d,%ddelete', start2, end2)
+		let cmd1 = 'noautocmd silent ' . start1 . ',' . end1 . 'delete'
+		let cmd2 = start2 > end2 ? '' : printf('noautocmd silent %d,%ddelete', start2, end2)
 	else
 		" curline represents the Filler before or Filler after: The
 		" Filler before is a separate Diff - because if linematch is
@@ -742,7 +768,9 @@ function! s:DeleteDiffInBothWindows() abort
 		" not representing the Filler). So nothing to delete in 1, and
 		" only need to land in the corresponding (also isolated) Added
 		" set in 2 and execute do. Similar reasoning applies to Filler
-		" after ('EOF Filler').
+		" after ('EOF Filler'). silent! in cmd2 is intentional, to
+		" proceed to 'do' even if the preceding j or k fails (when there
+		" is only one line).
 		let cmd1 = ''
 		let cmd2 = 'noautocmd silent! normal! ' . action . 'do'
 	endif
@@ -752,7 +780,7 @@ function! s:DeleteDiffInBothWindows() abort
 	redir => l:msg
 	if !empty(cmd1)
 		" Delete in curwinid and RecordEdit
-		silent! execute cmd1
+		execute cmd1
 		call s:RecordEdit(curwinid, curwinid, v:false)
 	endif
 	if !empty(cmd2)
@@ -765,7 +793,7 @@ function! s:DeleteDiffInBothWindows() abort
 
 	" As this edit wasn't a diff operation, force diffupdate
 	diffupdate
-	call s:Workaround6_diffupdate(curwinid)
+	call s:Workaround6_diffupdate()
 	call s:StayOnDiff()
 	return v:true
 endfunction
@@ -792,7 +820,7 @@ function! s:DeleteDiffInCurrentWindow() abort
 	"See 'Implementation Notes' NOTE2
 	let l:msg = ''
 	redir => l:msg
-	silent! execute printf('%d,%ddelete', start1, end1)
+	execute printf('noautocmd silent %d,%ddelete', start1, end1)
 	call s:RecordEdit(curwinid, curwinid, v:false)
 	redir END
 
@@ -802,7 +830,7 @@ function! s:DeleteDiffInCurrentWindow() abort
 	
 	" As this edit wasn't a diff operation, force diffupdate
 	diffupdate
-	call s:Workaround6_diffupdate(curwinid)
+	call s:Workaround6_diffupdate()
 	call s:StayOnDiff()
 	return v:true
 endfunction
@@ -832,9 +860,9 @@ function! s:Undo() abort
 		endif
 
 		if localwin
-			silent! undo
+			silent undo
 		else
-			call win_execute(entry.winid, 'noautocmd silent! undo')
+			call win_execute(entry.winid, 'noautocmd silent undo')
 		endif
 
 		call remove(s:undo_stack, -1)
@@ -851,6 +879,7 @@ function! s:Undo() abort
 	endwhile
 
 	diffupdate
+	" Decide cursor position based on the last undo (entry.winid)
 	call s:Workaround6_diffupdate(entry.winid)
 	call s:StayOnDiff()
 	call s:Message('Undid last edit in ' . l:msg)
@@ -940,10 +969,8 @@ function! s:JumpToDiffEnd(verbose) abort
 		endif
 
 		call setpos('.', pos)
-		" See 'Implementation Notes' Workaround1. Here if pos had
-		" changed, k is legal and kj succeeds; otherwise the workaround
-		" isn't needed anyway.
-		silent! normal! kj
+		" See 'Implementation Notes' Workaround1.
+		execute 'noautocmd silent normal! ' . (pos[1] == 1 ? 'jk' : 'kj')
 	endif
 
 	if a:verbose
@@ -961,16 +988,32 @@ endfunction
 " Jump to the first line of the first Diff
 " verbose(boolean): Whether to issue a helpful message
 function! s:JumpToFirstDiff(verbose) abort
-	let oldline = line('.')
+	let pos = getcurpos()
+	let oldline = pos[1]
 	" To go to the first line of the first Diff, we go to the first line,
 	" next Diff, and then previous Diff. This accounts for the case where
-	" the cursor is already inside the first Diff.
+	" the cursor is already inside the first Diff. silent! suppresses the
+	" beep in vim
 	silent! normal! gg]c[c
-	if a:verbose
-		if oldline == line('.')
-			call s:Message('Already at first Diff')
-		else
-			echo ''
+	let newline = line('.')
+	if s:RepresentsDiff(newline)
+		if a:verbose
+			if newline == oldline
+				call s:Message('Already at first Diff')
+			else
+				echo ''
+			endif
+		endif
+	else
+		if a:verbose
+			call s:Message('No Diff present')
+		endif
+		if newline != oldline
+			" Restore cursor
+			call setpos(".", pos)
+			" See 'Implementation Notes' Workaround1. Here
+			" newline < oldline, so k is legal and kj succeeds.
+			noautocmd silent normal! kj
 		endif
 	endif
 	return v:true
@@ -981,16 +1024,32 @@ endfunction
 " Jump to the first line of the last Diff.
 " verbose(boolean): Whether to issue a helpful message
 function! s:JumpToLastDiff(verbose) abort
-	let oldline = line('.')
+	let pos = getcurpos()
+	let oldline = pos[1]
 	" To go to the first line of the last Diff, we go to the last line,
 	" previous Diff, and then next Diff. This accounts for the case where
-	" the cursor is already inside the last Diff.
+	" the cursor is already inside the last Diff. silent! suppresses the
+	" beep in vim
 	silent! normal! G[c]c
-	if a:verbose
-		if oldline == line('.')
-			call s:Message('Already at last Diff')
-		else
-			echo ''
+	let newline = line('.')
+	if s:RepresentsDiff(newline)
+		if a:verbose
+			if newline == oldline
+				call s:Message('Already at last Diff')
+			else
+				echo ''
+			endif
+		endif
+	else
+		if a:verbose
+			call s:Message('No Diff present')
+		endif
+		if newline != oldline
+			" Restore cursor
+			call setpos(".", pos)
+			" See 'Implementation Notes' Workaround1. Here
+			" newline > oldline, so j is legal and jk succeeds.
+			noautocmd silent normal! jk
 		endif
 	endif
 	return v:true
@@ -1002,12 +1061,21 @@ endfunction
 function! s:JumpToPreviousDiff(verbose) abort
 	" As v:count1 is reset by any normal mode command, save it upfront
 	let repeat = v:count1
+	let pos = getcurpos()
 	call s:JumpToDiffStart(v:false)
 	let oldline = line('.')
-	execute 'silent! normal! ' . repeat . '[c'
-	if oldline == line('.')
+	execute 'silent normal! ' . repeat . '[c'
+	let newline = line('.')
+	if newline == oldline
 		if a:verbose
 			call s:Message('No previous Diff to move to')
+		endif
+		if newline != pos[1]
+			" Restore cursor
+			call setpos(".", pos)
+			" See 'Implementation Notes' Workaround1. Here
+			" newline < oldline, so k is legal and kj succeeds.
+			noautocmd silent normal! kj
 		endif
 		return v:false
 	endif
@@ -1022,7 +1090,7 @@ endfunction
 " verbose(boolean): Whether to issue a helpful message
 function! s:JumpToNextDiff(verbose) abort
 	let oldline = line('.')
-	execute 'silent! normal! ' . v:count1 . ']c'
+	execute 'silent normal! ' . v:count1 . ']c'
 	if oldline == line('.')
 		if a:verbose
 			call s:Message('No next Diff to move to')
@@ -1053,7 +1121,7 @@ function! s:JumpToOtherWindow() abort
 		return v:false
 	endif
 	" Force exact line correspondence
-	call s:Workaround6_diffupdate(win_getid())
+	call s:Workaround6_diffupdate()
 	" if curline follows a Filler, after switching to the other window move
 	" the cursor to the corresponding preceding Added. This is a legal
 	" correspondence that also prevents StayOnDiff() from needlessly moving
@@ -1061,7 +1129,7 @@ function! s:JumpToOtherWindow() abort
 	let filler_before = s:RepresentsFillerBefore(line("."))
 	noautocmd wincmd w
 	if filler_before
-		silent! normal! k
+		silent normal! k
 	endif
 	call s:StayOnDiff()
 	echo 'Changed focus to ' . (winnr() == 1 ? 'left' : 'right') . ' window'
@@ -1166,20 +1234,20 @@ function! s:DiffModeSetup() abort
 		endif
 	endif
 
-	nnoremap <buffer> <Right> <Cmd>call <SID>MergeDiff(v:true)<CR>
-	nnoremap <buffer> <Left> <Cmd>call <SID>MergeDiff(v:false)<CR>
-	nnoremap <buffer> <Del> <Cmd>call <SID>DeleteAction()<CR>|	"Overloaded using count
-	nmap     <buffer> <S-Del> 2<Del>|				"Convenient if terminal supports <S-Del>
-	nnoremap <buffer> <BS> <Cmd>call <SID>Undo()<CR>
-	noremap <buffer> <PageUp> <Cmd>call <SID>JumpToDiffStart(v:true)<CR>
-	noremap <buffer> <PageDown> <Cmd>call <SID>JumpToDiffEnd(v:true)<CR>
-	noremap <buffer> <Home> <Cmd>call <SID>HomeAction()<CR>|	"Overloaded using count
-	map     <buffer> <S-Home> 2<Home>|				"Convenient if terminal supports <S-Home>
-	noremap <buffer> <End> <Cmd>call <SID>EndAction()<CR>|		"Overloaded using count
-	map     <buffer> <S-End> 2<End>|				"Convenient if terminal supports <S-End>
-	noremap <buffer> <Up> <Cmd>call <SID>JumpToPreviousDiff(v:true)<CR>|	"Accepts count
-	noremap <buffer> <Down> <Cmd>call <SID>JumpToNextDiff(v:true)<CR>|	"Accepts count
-	nnoremap <buffer> <F1> <Cmd>call <SID>ShowHelp()<CR>
+	nnoremap <buffer> <Right>    <Cmd>call <SID>MergeDiff(v:true)<CR>
+	nnoremap <buffer> <Left>     <Cmd>call <SID>MergeDiff(v:false)<CR>
+	nnoremap <buffer> <Del>      <Cmd>call <SID>DeleteAction()<CR>|	"Overloaded using count
+	nmap     <buffer> <S-Del>    2<Del>|				"Convenient if terminal supports <S-Del>
+	nnoremap <buffer> <BS>       <Cmd>call <SID>Undo()<CR>
+	noremap  <buffer> <PageUp>   <Cmd>call <SID>JumpToDiffStart(v:true)<CR>
+	noremap  <buffer> <PageDown> <Cmd>call <SID>JumpToDiffEnd(v:true)<CR>
+	noremap  <buffer> <Home>     <Cmd>call <SID>HomeAction()<CR>|	"Overloaded using count
+	map      <buffer> <S-Home>   2<Home>|				"Convenient if terminal supports <S-Home>
+	noremap  <buffer> <End>      <Cmd>call <SID>EndAction()<CR>|	"Overloaded using count
+	map      <buffer> <S-End>    2<End>|				"Convenient if terminal supports <S-End>
+	noremap  <buffer> <Up>       <Cmd>call <SID>JumpToPreviousDiff(v:true)<CR>|	"Accepts count
+	noremap  <buffer> <Down>     <Cmd>call <SID>JumpToNextDiff(v:true)<CR>|		"Accepts count
+	nnoremap <buffer> <F1>       <Cmd>call <SID>ShowHelp()<CR>
 
 	call s:JumpToFirstDiff(v:false)
 endfunction
