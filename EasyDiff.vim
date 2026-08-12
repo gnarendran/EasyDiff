@@ -49,7 +49,8 @@
 "     windows, at once. To only undo one of those deletes, one has to manually
 "     undo using 'u', but that will reset EasyDiff's undo tracking.
 "   - <S-End> or 2<End> toggles 'linematch' diffopt; 3<End> toggles centering
-"     with 'scrolloff=999'; 4<End> toggles 'set number'
+"     with 'scrolloff=999'; 4<End> toggles 'set number'; 5<End> toggles variable
+"     g:easydiff_stay_on_diff
 "   - <Home> jumps to the first Diff. At start, the cursor is automatically
 "     positioned on the first Diff in the left window.
 "   - <S-Home> Moves cursor to the corresponding line in the other window; once
@@ -116,7 +117,7 @@
 "     Filler') follows it, then that 'EOF Filler' is considered to precede a
 "     *virtual line* curline+1. This 'EOF Filler' is identified by
 "     diff_filler(curline+1) > 0 (equal to the number of lines in the 'EOF
-"     Filler'). NOTE1: In Vim/Neovim help there are some hints, but no explicit
+"     Filler'). NOTE1: In Vim/Neovim help there were some hints, but no explicit
 "     mention, of this special case.
 "     See:
 "     https://github.com/vim/vim/issues/20990
@@ -515,11 +516,17 @@ function! s:StayOnDiff() abort
 	" Workaround4.
 	call s:Workaround4_diff_hlID(otherwinid)
 	if !s:RepresentsDiff(curline)
-		" cursor not on a Diff, so move it to the next Diff.
-		silent! normal! ]c
-		if curline == line('.')
-			" No next Diff, so jump to the previous(last) Diff.
-			silent! normal! [c
+		" cursor not on a Diff, so has to move. Prefer staying on
+		" previous Added than advancing to next Diff.
+		if s:WinEval(otherwinid, 's:RepresentsFillerBefore(line("."))')
+			silent normal! k
+		else
+			" Try moving to next Diff, failing which jump to the
+			" previous(last) Diff.
+			silent! normal! ]c
+			if curline == line('.')
+				silent! normal! [c
+			endif
 		endif
 	endif
 	return v:true
@@ -1122,15 +1129,7 @@ function! s:JumpToOtherWindow() abort
 	endif
 	" Force exact line correspondence
 	call s:Workaround6_diffupdate()
-	" if curline follows a Filler, after switching to the other window move
-	" the cursor to the corresponding preceding Added. This is a legal
-	" correspondence that also prevents StayOnDiff() from needlessly moving
-	" the cursor.
-	let filler_before = s:RepresentsFillerBefore(line("."))
 	noautocmd wincmd w
-	if filler_before
-		silent normal! k
-	endif
 	call s:StayOnDiff()
 	echo 'Changed focus to ' . (winnr() == 1 ? 'left' : 'right') . ' window'
 	return v:true
@@ -1203,6 +1202,9 @@ function! s:EndAction() abort
 			call win_execute(win.winid, 'noautocmd ' . cmd)
 		endfor
 		echo 'Executed "' . cmd . '" in both windows'
+	elseif v:count1 == 5
+		let g:easydiff_stay_on_diff = !g:easydiff_stay_on_diff 
+		echo 'g:easydiff_stay_on_diff ' . (g:easydiff_stay_on_diff ? 'enabled' : 'disabled')
 	endif
 
 	return v:true
