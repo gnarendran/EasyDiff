@@ -1,5 +1,6 @@
 "********************************************************************************
 " Author  : Narendran Gopalakrishnan
+" GitHub  : https://github.com/gnarendran/EasyDiff
 " Usage   : source this Vim script anywhere in Vim/Neovim startup scripts, say
 "           in vimrc ($XDG_CONFIG_HOME/vim/vimrc maybe) or init.nvim (say
 "           $XDG_CONFIG_HOME/nvim/init.vim), or drop it in the plugin directory.
@@ -48,9 +49,8 @@
 "   - <Backspace> Undoes both deletions performed by <S-Delete> in the two
 "     windows, at once. To only undo one of those deletes, one has to manually
 "     undo using 'u', but that will reset EasyDiff's undo tracking.
-"   - <S-End> or 2<End> toggles 'linematch' diffopt; 3<End> toggles centering
-"     with 'scrolloff=999'; 4<End> toggles 'set number'; 5<End> toggles variable
-"     g:easydiff_stay_on_diff
+"   - <S-End> or 2<End> toggles variable g:easydiff_stay_on_diff; 3<End> toggles
+"     'linematch' diffopt; 4<End> toggles 'set number'.
 "   - <Home> jumps to the first Diff. At start, the cursor is automatically
 "     positioned on the first Diff in the left window.
 "   - <S-Home> Moves cursor to the corresponding line in the other window; once
@@ -75,6 +75,10 @@
 "     tracking.
 "   - The default key bindings may not suit all workflows. Mappings can be
 "     customized inside s:DiffModeSetup()
+"   - Non-zero scrolloff is known to affect cursorbind in some cases (for eg.
+"     when one window is not able to scroll). As cursorbind is essential for
+"     correct EasyDiff operations, it is recommended to keep the setting
+"     `setlocal scrolloff=0` in both windows.
 "   - Due to an upstream Vim/Neovim rendering quirk, an EOF filler may not be
 "     visible by default even though EasyDiff tracks it correctly; press <C-e>
 "     to reveal it.
@@ -192,9 +196,8 @@
 "   (considered ]c, diff folds etc.).
 "
 " - If the file is larger than a screenful, an 'EOF Filler' isn't rendered.
-"   Workaround3: There is no clean workaround yet for this. The attempt
-"   call feedkeys("\<C-e>", 'n') to expose one line after the last line, can
-"   move the cursor due to 'set scrolloff=999', which is not desirable.
+"   Workaround3: There is no clean workaround yet for this other than using
+"   <C-e>.
 "
 " - Workaround4: For Vim/Neovim-0.11.6 bug (likely fixed in Neovim-0.12.0):
 "   After a Merge/Undo and a further diffupdate, in some cases subsequent
@@ -203,10 +206,10 @@
 " - Workaround5: For Neovim-0.11.6 bug fixed in Neovim-0.12.0: If a Diff
 "   precedes 'EOF Filler', a 'do' on the Diff also does a 'do' on the Filler.
 "   Instead executing a 'dp' from the other window gives the expected result.
-" - Workaround7: In gvim, scrolloff=999 makes cursorbind go wrong sometimes.
-"   This issue isn't present in vim or nvim. Couldn't find a workaround other
-"   than disabling 'scrolloff=999' in gvim.
-"
+" - Workaround7: In both Vim and Neovim, a non-zero scrolloff (say scrolloff=999
+"   to center the cursor), makes cursorbind go wrong, mostly when a window
+"   cannot scroll more. Couldn't find a workaround other than forcing
+"   'setlocal scrolloff=999'
 " - edits and undo's by commands other than the standard diff commands (like do,
 "   dp, [c, ]c etc.), can leave the diff display temporarily stale and out of
 "   sync. So a subsequent message might disappear when an auto diffupdate/redraw
@@ -248,7 +251,6 @@
 let g:easydiff_stay_on_diff = v:true
 let s:thisfile = expand('<sfile>:p')
 let s:saved_linematch=''
-let s:saved_scrolloff=''
 let s:editor_version = ''
 " Stack of tracked Diff Merges and Deletes.
 " Each entry is {'winid': ..., 'changenr': ..., 'grouped': ...}.
@@ -387,7 +389,7 @@ function! s:Message(msg) abort
 		endif
 	endfor
 	if !empty(l:warning)
-		echohl WarningMsg 
+		echohl WarningMsg
 		echomsg l:warning
 		echohl None
 	endif
@@ -588,7 +590,7 @@ function! s:MergeDiff(right) abort
 	let prev_diff = 'k'
 	let next_diff = 'j'
 
-	if (!filler_before && changed && !filler_after) 
+	if (!filler_before && changed && !filler_after)
 				\ || (filler_before && !changed && !filler_after)
 				\ || (!filler_before && !changed && filler_after)
 		let action = ''
@@ -597,7 +599,7 @@ function! s:MergeDiff(right) abort
 		if choice == 0
 			return v:false
 		endif
-		let action = choice == 1 ? prev_diff : '' 
+		let action = choice == 1 ? prev_diff : ''
 	elseif !filler_before && changed && filler_after
 		if linematch
 			let choice = s:Prompt('Operate on Current or Next Diff?', "&Current\n&Next")
@@ -651,13 +653,35 @@ function! s:MergeDiff(right) abort
 		call win_execute(targetwinid, action)
 	endif
 	redir END
-	
+
 	if !empty(l:msg)
 		call s:Message(l:msg)
 	endif
 	let changed_winid = a:right ? (curwinnr == 1 ? otherwinid : curwinid) : (curwinnr == 1 ? curwinid : otherwinid)
 	call s:RecordEdit(curwinid, changed_winid, v:false)
 	return s:StayOnDiff()
+endfunction
+
+" EndRepresentsAdded {{{1
+" Helper for DeleteDiffInBothWindows; Expensive test used as a last resort to
+" find if line('.') that is already known to be the end of a Diff, is a Added
+" line.
+" Returns v:true if line('.') is Added; v:false otherwise
+function! s:EndRepresentsAdded() abort
+	" other window's curline can represent a single Changed line, or a one
+	" line Filler, and both can legally correspond to this end of Diff in 1.
+	" Decide by going to the next line in 1 and checking if line('.')
+	" changes in 2.
+	let otherwinid = win_getid(winnr() == 1 ? 2 : 1)
+	if line('.') < line('$')
+		let other_curline = s:WinEval(otherwinid, 'line(".")')
+		silent normal! j
+		let res = other_curline == s:WinEval(otherwinid, 'line(".")')
+		silent normal! k
+	else
+		let res = s:WinEval(otherwinid, 'diff_filler(line("$")+1)>0')
+	endif
+	return res
 endfunction
 
 " DeleteDiffInBothWindows {{{1
@@ -678,7 +702,7 @@ function! s:DeleteDiffInBothWindows() abort
 
 	" Below 1 refers to the current window, and 2 the other. So start1 is
 	" the starting line of Diff in the current window and so on.
-	
+
 	" Corresponding line in other window may legally be in one of up to
 	" three Diffs. For example, if filler_before && changed && filler_after,
 	" the corresponding line may be in one of previous Added, current
@@ -707,7 +731,7 @@ function! s:DeleteDiffInBothWindows() abort
 		if choice == 0
 			return v:false
 		endif
-		let action = choice == 1 ? prev_diff : '' 
+		let action = choice == 1 ? prev_diff : ''
 	elseif !filler_before && changed && filler_after
 		if linematch
 			let choice = s:Prompt('Operate on Current or Next Diff?', "&Current\n&Next")
@@ -750,21 +774,36 @@ function! s:DeleteDiffInBothWindows() abort
 			" In 2, there are at least some Added lines to delete,
 			" but no Filler
 			let end2 = start2 + end1 - start1 + fillers1
-		elseif s:WinEval(otherwinid, 's:RepresentsChanged('. start2 .')')
-			" In 2, there are some Changed lines to delete, and
-			" possibly a Filler as well.
-			let end2 = s:WinEval(otherwinid, 'line(".")')
-			" If there indeed is a Filler (so end2 represents it)
-			" and it is not an EOF Filler, decrement end2.
-			if end1 - start1 > end2 - start2 && 
-						\ !s:WinEval(otherwinid, 's:RepresentsFillerAfter('. end2 .')')
-				let end2 -= 1
-			endif
 		else
-			" Nothing to delete in 2, so invalidate end2
-			let end2 = -1
+			" In 2, there could be some fillers and end2 has to be
+			" invalidated if there is nothing to delete, or
+			" decremented if it represents a Filler before. The
+			" following clauses apply with or without linematch.
+			let end2 = s:WinEval(otherwinid, 'line(".")')
+			let fillers2_before = s:WinEval(otherwinid, 'diff_filler(' . end2 . ')')
+			if end2 > start2
+				if fillers2_before > 0
+					let end2 -= 1
+				endif
+			else " end2 == start2
+				if end1 > start1
+					" filler2_before fully corresponds to
+					" the Diff in 1.
+					let end2 = -1
+				else " end1 == start1
+					if fillers2_before == 1
+						" either the filler2_before or end2
+						" could correspond to the Diff in 1
+						" As a last resort tie-break
+						" using this call:
+						if s:EndRepresentsAdded()
+							let end2 = -1
+						endif
+					endif
+				endif
+			endif
 		endif
-
+		
 		let cmd1 = 'noautocmd silent ' . start1 . ',' . end1 . 'delete'
 		let cmd2 = start2 > end2 ? '' : printf('noautocmd silent %d,%ddelete', start2, end2)
 	else
@@ -834,7 +873,7 @@ function! s:DeleteDiffInCurrentWindow() abort
 	if !empty(l:msg)
 		call s:Message(l:msg)
 	endif
-	
+
 	" As this edit wasn't a diff operation, force diffupdate
 	diffupdate
 	call s:Workaround6_diffupdate()
@@ -919,6 +958,11 @@ function! s:JumpToDiffStart(verbose) abort
 		" before curline, [c silently fails, still staying at the
 		" 'start' of this Diff. So in all cases we reach the start of
 		" this Diff correctly.
+		" NOTE: If curline represents multiple Diffs, say 'Changed' and
+		" 'Filler after' ('EOF Filler'), then it is ambiguous as to
+		" which Diff's start we should jump to. To be deterministic as a
+		" Helper function, we remain at the 'EOF Filler's 'start'. This
+		" also makes some sense when the Changed Diff is also of size 1.
 		silent! normal! [c]c
 	endif
 	if a:verbose
@@ -929,6 +973,36 @@ function! s:JumpToDiffStart(verbose) abort
 		endif
 	endif
 	return v:true
+endfunction
+
+" LastLineIsADifferentDiff {{{1
+" Helper for s:JumpToDiffEnd
+function! s:LastLineIsADifferentDiff() abort
+	" We are already at the last line, and know that it is is Changed or
+	" Added. But the last line may be preceded by a Filler, return v:true if
+	" so.
+	if diff_filler(line('.')) > 0
+		return v:true
+	endif
+
+	" So it is adjacent with the previous line. Now if the last line had
+	" flipped from Changed to Added or vice-versa, return v:true, else
+	" v:false. To know that, we have to probe the other window's EOF Filler
+	" lines.
+	let otherwinid = win_getid(winnr() == 1 ? 2 : 1)
+	let eof_fillers2 = s:WinEval(otherwinid, 'diff_filler(line("$")+1)')
+
+	if eof_fillers2 == 0
+		" last line in this window is Changed, and so the corresponding
+		" line in other window as well. We can check if that line in
+		" other window represents any fillers before, if it does, then
+		" our last line had flipped from Added, else not.
+		return s:WinEval(otherwinid, 'diff_filler(line(".")) > 0')
+	endif
+	" If eof_fillers2 == 1, last line flipped (it is the only Added
+	" line and the previous was Changed); >2, it didn't flip (the previous
+	" line was also Added).
+	return eof_fillers2 == 1
 endfunction
 
 " JumpToDiffEnd {{{1
@@ -948,7 +1022,7 @@ function! s:JumpToDiffEnd(verbose) abort
 
 	" First find the line before the following Unchanged set, by scanning
 	" forward with diff_hlID(), which is O(hunk size). Due to the presence
-	" of Unchanged lines, there doesn't seem to be an more optimal solution
+	" of Unchanged lines, there doesn't seem to be a more optimal solution
 	" (considered ]c, diff folds etc.).
 	let last = line('$')
 	while curline < last && diff_hlID(curline + 1, 1) != 0
@@ -963,11 +1037,23 @@ function! s:JumpToDiffEnd(verbose) abort
 		if s:LinematchEnabled()
 			" Find lnum, the start of the next Diff
 			silent! normal! ]c
-			let lnum = line('.')
-			" if lnum within the range, and <last (to account for
-			" any 'EOF Filler'), then lnum - 1 is the answer; else
-			" curline.
-			let pos[1] = (lnum > origin && lnum <= curline && lnum < last) ? lnum - 1 : curline
+			let next = line('.')
+			if next > origin && next <= curline
+				if next == last
+					" NOTE: last can represent multiple
+					" Diffs - EOF Filler, this Diff's last
+					" line or another one line Diff. Find if
+					" last has broken ranks with the
+					" previous lines (Changed to Added or
+					" Added to Changed), and if it did, use
+					" its preceding line as the end-of-Diff.
+					let pos[1] = s:LastLineIsADifferentDiff() ? (last - 1) : last
+				else
+					let pos[1] = next - 1
+				endif
+			else
+				let pos[1] = curline
+			endif
 		else
 			" Without 'linematch' in diffopt, adjacent Added/Changed
 			" sets are combined into a single Diff, so curline is
@@ -1154,6 +1240,9 @@ function! s:EndAction() abort
 		return s:JumpToLastDiff(v:true)
 	endif
 	if v:count1 == 2
+		let g:easydiff_stay_on_diff = !g:easydiff_stay_on_diff
+		echo 'g:easydiff_stay_on_diff ' . (g:easydiff_stay_on_diff ? 'enabled' : 'disabled')
+	elseif v:count1 == 3
 		" Toggle linematch in diffopt
 		let linematch=matchstr(&diffopt, '\<linematch:\d\+\>')
 		if empty(linematch)
@@ -1172,27 +1261,8 @@ function! s:EndAction() abort
 			execute 'set diffopt-=' . linematch
 			echo linematch . ' removed from diffopt'
 		endif
-	elseif v:count1 == 3
-		" Toggle scrolloff=999 that centers cursor line
-		if &scrolloff == 999
-			if empty(s:saved_scrolloff)
-				let s:saved_scrolloff=0
-			endif
-			let new_scrolloff=s:saved_scrolloff
-		else
-			let s:saved_scrolloff=&scrolloff
-			let new_scrolloff=999
-		endif
-		if new_scrolloff != 0 && !has('nvim') && has('gui_running')
-			call s:Message('WED013: non-zero scrolloff affects cursorbind in gvim')
-		endif
-		let cmd='setlocal scrolloff=' . new_scrolloff
-		for win in getwininfo()
-			call win_execute(win.winid, 'noautocmd ' . cmd)
-		endfor
-		echo 'Executed "' . cmd . '" in both windows'
 	elseif v:count1 == 4
-		" Toggle number 
+		" Toggle number
 		if &number == 0
 			let cmd='set number'
 		else
@@ -1202,9 +1272,6 @@ function! s:EndAction() abort
 			call win_execute(win.winid, 'noautocmd ' . cmd)
 		endfor
 		echo 'Executed "' . cmd . '" in both windows'
-	elseif v:count1 == 5
-		let g:easydiff_stay_on_diff = !g:easydiff_stay_on_diff 
-		echo 'g:easydiff_stay_on_diff ' . (g:easydiff_stay_on_diff ? 'enabled' : 'disabled')
 	endif
 
 	return v:true
@@ -1217,6 +1284,10 @@ function! s:DiffModeSetup() abort
 		return
 	endif
 	let w:diff_setup_done = 1
+
+	" A Non-zero scrolloff affects cursorbind which is vital to EasyDiff.
+	" See 'Implementation Notes' Workaround7.
+	setlocal scrolloff=0
 
 	if empty(s:editor_version)
 		if has('nvim')

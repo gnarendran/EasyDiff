@@ -54,7 +54,7 @@ source /path/to/EasyDiff.vim
 > * `<Delete>` deletes the Diff **only** in the current window. If the deleted Diff is adjacent to an existing Filler, Vim/Neovim merges the new and existing Fillers into a single, larger Diff. Then the new larger Diff may be merged with the other window using `<Left>` or `<Right>`.
 > * `<S-Delete>` first finds the full extent of the Diff in current window, including any Filler. Then it deletes this extent from **both** windows.
 > * `<Backspace>` undoes both the deletes performed by `<S-Delete>` in the two windows, at once. To only undo one of those deletes, one has to manually undo using 'u', but that will reset EasyDiff's undo tracking.
-> * `<S-End>` or `2<End>` toggles 'linematch' diffopt; `3<End>` toggles centering with 'scrolloff=999'; `4<End>` toggles numbering the lines with 'number'
+> * `<S-End>` or `2<End>` toggles variable g:easydiff_stay_on_diff; `3<End>` toggles 'linematch' diffopt; `4<End>` toggles numbering the lines with 'number'.
 > * `<Home>` jumps to the first Diff. At start, the cursor is automatically placed on the first Diff in the left window.
 > * `<S-Home>` Moves cursor to the corresponding line in the other window; once there, moves cursor as per variable g:easydiff_stay_on_diff. Vim/Neovim's native <C-w>w could instead be used to switch windows without readjusting the cursor position.
 > * If the terminal does not support the shifted keys `<S-Delete>`, `<S-Home>`, or `<S-End>`, alternatives `2<Delete>`, `2<Home>`, `2<End>` may be used.
@@ -82,4 +82,5 @@ let g:easydiff_stay_on_diff = 0
 
 * **Edit Tracking & Undo:** EasyDiff tracks edits (merges/deletes) performed using `<Right>`, `<Left>`, `<Delete>` or `<S-Delete>`, allowing them to be repeatedly undone using `<Backspace>`. **Note:** Performing any manual edit will reset this edit tracking.
 * **Custom Mappings:** The default key bindings may not suit all workflows. Mappings can be customized inside `s:DiffModeSetup()`.
+* Non-zero scrolloff is known to affect cursorbind in some cases in both Vim and Neovim. As cursorbind is essential for correct EasyDiff operations, it is recommended to keep `setlocal scrolloff=0` in both windows.
 * Due to an upstream Vim/Neovim rendering quirk, an EOF filler may not be visible by default even though EasyDiff tracks it correctly; press `<C-e>` to reveal it.
