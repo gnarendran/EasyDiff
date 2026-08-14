@@ -662,6 +662,18 @@ function! s:MergeDiff(right) abort
 	return s:StayOnDiff()
 endfunction
 
+" EOFFillers {{{1
+" Helper for EndRepresentsAdded
+" Returns the number of EOF Fillers
+function! s:EOFFillers() abort
+	let last = line('$')
+	" Find the virtual line that follows the EOF Fillers. If the buffer is
+	" empty, virt_line is 1, otherwise line('$')+1. This distinction is
+	" needed as line('$') == 1 even for an empty buffer.
+	let virt_line = last == 1 && empty(getline(1)) ? 1 : last + 1
+	return diff_filler(virt_line)
+endfunction
+
 " EndRepresentsAdded {{{1
 " Helper for DeleteDiffInBothWindows; Expensive test used as a last resort to
 " find if line('.') that is already known to be the end of a Diff, is a Added
@@ -675,11 +687,11 @@ function! s:EndRepresentsAdded() abort
 	let otherwinid = win_getid(winnr() == 1 ? 2 : 1)
 	if line('.') < line('$')
 		let other_curline = s:WinEval(otherwinid, 'line(".")')
-		silent normal! j
+		noautocmd silent normal! j
 		let res = other_curline == s:WinEval(otherwinid, 'line(".")')
-		silent normal! k
+		noautocmd silent normal! k
 	else
-		let res = s:WinEval(otherwinid, 'diff_filler(line("$")+1)>0')
+		let res = s:WinEval(otherwinid, 's:EOFFillers() > 0')
 	endif
 	return res
 endfunction
@@ -1000,7 +1012,7 @@ function! s:LastLineIsADifferentDiff() abort
 		return s:WinEval(otherwinid, 'diff_filler(line(".")) > 0')
 	endif
 	" If eof_fillers2 == 1, last line flipped (it is the only Added
-	" line and the previous was Changed); >2, it didn't flip (the previous
+	" line and the previous was Changed); >1, it didn't flip (the previous
 	" line was also Added).
 	return eof_fillers2 == 1
 endfunction
@@ -1012,7 +1024,6 @@ endfunction
 function! s:JumpToDiffEnd(verbose) abort
 	let pos = getcurpos('.')
 	let curline = pos[1]
-
 	if !s:RepresentsChanged(curline)
 		if a:verbose
 			call s:Message('Not inside a Diff')
@@ -1024,19 +1035,19 @@ function! s:JumpToDiffEnd(verbose) abort
 	" forward with diff_hlID(), which is O(hunk size). Due to the presence
 	" of Unchanged lines, there doesn't seem to be a more optimal solution
 	" (considered ]c, diff folds etc.).
+	let origin = curline
 	let last = line('$')
 	while curline < last && diff_hlID(curline + 1, 1) != 0
 		let curline += 1
 	endwhile
 
-	let origin = pos[1]
 	if curline > origin
 		" When diffopt includes linematch, each Added/Changed/Filler set
 		" is a separate Diff even if adjacent. So there can be multiple
 		" Diffs (Changed and/or Added) in the range [origin, curline].
 		if s:LinematchEnabled()
 			" Find lnum, the start of the next Diff
-			silent! normal! ]c
+			noautocmd silent! normal! ]c
 			let next = line('.')
 			if next > origin && next <= curline
 				if next == last
