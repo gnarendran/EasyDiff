@@ -232,17 +232,18 @@
 "   https://github.com/neovim/neovim/issues/41250
 " - NOTE2: Messages from 'do'/'dp' like 'W10: Warning: Changing a readonly file'
 "   aren't exceptions. But when invoked from within functions, they are printed
-"   with Vim's function context which we don't need. So redir the messages, with
-"   silent! to suppress the original output, and then use s:Message()
-"   redisplay to them without Vim's function context.
-" - NOTE3: Warning messages such as 'W10: Warning: Changing a readonly file'
-"   are suppressed by win_execute. win_execute however doesn't suppress
-"   informational messages like '1 line less'.
-" - NOTE4: There is a bug in Vim 9.2.390 and Neovim 0.12.4, fixed in later
+"   with Vim's function context which we don't need. So silent is used to
+"   suppress the original output, and then s:Message() redisplays them without
+"   Vim's function context.
+" - NOTE3: There is a bug in Vim 9.2.390 and Neovim 0.12.4, fixed in later
 "   versions of Vim/Neovim, involving :diffget (normal do) into an empty buffer.
 "   See:
 "   https://github.com/vim/vim/issues/20950
 "   https://github.com/neovim/neovim/issues/41172
+" - NOTE4: There is a bug in the message issued by delete when the buffer
+"   becomes empty, both in Vim 9.2.920 and Neovim 0.12.4. See:
+"   https://github.com/vim/vim/issues/21049
+"   https://github.com/neovim/neovim/issues/41306
 
 " Variables {{{1
 " After a Merge/Delete/Undo the cursor might not be on a Diff. The following
@@ -367,6 +368,16 @@ function! s:Workaround6_diffupdate(...) abort
 	endif
 endfunction
 
+" TaggedMessage {{{1
+" Helper that combines the messages for left and right windows with suitable
+" tags.
+" left/right: The messages for the left/right windows
+function! s:TaggedMessage(left, right) abort
+	let l:leftmsg = empty(a:left) ? '' : substitute(a:left, '^\|\n\zs', 'left: ', 'g')
+	let l:rightmsg = empty(a:right) ? '' : substitute(a:right, '^\|\n\zs', 'right: ', 'g')
+	call s:Message(l:leftmsg . "\n" . l:rightmsg)
+endfunction
+
 " Message {{{1
 " Helper that removes Vim context from messages, and adds suitable highlighting
 " msg: The message to be printed
@@ -378,14 +389,14 @@ function! s:Message(msg) abort
 	" redraw to avoid the prompt 'Press ENTER or type command to continue'
 	redraw
 	for l:line in l:lines
-		let l:line = substitute(l:line, '.*line\s\+\d\+:\s*\|Error.* function.*:', '', '')
+		let l:line = substitute(l:line, 'line\s\+\d\+:\s*\|.*Error.* function.*:.*', '', '')
 		if empty(l:line)
 			continue
 		endif
-		if l:line =~# '^W[A-Z]*\d\+:'
-			let l:warning .= (empty(l:warning) ? '' : '; ') . l:line
+		if l:line =~# '^\(\(left\|right\): \)\?W[A-Z]*\d\+:'
+			let l:warning .= (empty(l:warning) ? '' : '. ') . l:line
 		else
-			let l:info .= (empty(l:info) ? '' : '; ') . l:line
+			let l:info .= (empty(l:info) ? '' : '. ') . l:line
 		endif
 	endfor
 	if !empty(l:warning)
@@ -645,21 +656,22 @@ function! s:MergeDiff(right) abort
 	endif
 
 	" See 'Implementation Notes' NOTE2
-	let l:msg = ''
-	redir => l:msg
 	if targetwinid == curwinid
-		execute action
+		let l:msg = trim(execute(action))
 	else
-		call win_execute(targetwinid, action)
+		let l:msg = trim(win_execute(targetwinid, action))
 	endif
-	redir END
 
-	if !empty(l:msg)
-		call s:Message(l:msg)
-	endif
 	let changed_winid = a:right ? (curwinnr == 1 ? otherwinid : curwinid) : (curwinnr == 1 ? curwinid : otherwinid)
 	call s:RecordEdit(curwinid, changed_winid, v:false)
-	return s:StayOnDiff()
+	call s:StayOnDiff()
+	let l:leftmsg = ''
+	let l:rightmsg = ''
+	if !empty(l:msg)
+		execute 'let ' . (changed_winid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
+		call s:TaggedMessage(l:leftmsg, l:rightmsg)
+	endif
+	return v:true
 endfunction
 
 " EOFFillers {{{1
@@ -834,25 +846,30 @@ function! s:DeleteDiffInBothWindows() abort
 	endif
 
 	"See 'Implementation Notes' NOTE2
-	let l:msg = ''
-	redir => l:msg
+	let l:leftmsg = ''
+	let l:rightmsg = ''
 	if !empty(cmd1)
 		" Delete in curwinid and RecordEdit
-		execute cmd1
+		let l:msg = trim(execute(cmd1))
 		call s:RecordEdit(curwinid, curwinid, v:false)
+		if !empty(l:msg)
+			execute 'let ' . (curwinid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
+		endif
 	endif
 	if !empty(cmd2)
 		" Delete in otherwinid and RecordEdit grouped with the previous
-		call win_execute(otherwinid, cmd2)
+		let l:msg = trim(win_execute(otherwinid, cmd2))
 		call s:RecordEdit(curwinid, otherwinid, !empty(cmd1))
+		if !empty(l:msg)
+			execute 'let ' . (otherwinid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
+		endif
 	endif
-	redir END
-	call s:Message(l:msg)
 
 	" As this edit wasn't a diff operation, force diffupdate
 	diffupdate
 	call s:Workaround6_diffupdate()
 	call s:StayOnDiff()
+	call s:TaggedMessage(l:leftmsg, l:rightmsg)
 	return v:true
 endfunction
 
@@ -876,20 +893,19 @@ function! s:DeleteDiffInCurrentWindow() abort
 
 	" Delete the Diff in current window and RecordEdit
 	"See 'Implementation Notes' NOTE2
-	let l:msg = ''
-	redir => l:msg
-	execute printf('noautocmd silent %d,%ddelete', start1, end1)
+	let l:leftmsg = ''
+	let l:rightmsg = ''
+	let l:msg = trim(execute(printf('noautocmd silent %d,%ddelete', start1, end1)))
 	call s:RecordEdit(curwinid, curwinid, v:false)
-	redir END
-
 	if !empty(l:msg)
-		call s:Message(l:msg)
+		execute 'let ' . (curwinid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
 	endif
 
 	" As this edit wasn't a diff operation, force diffupdate
 	diffupdate
 	call s:Workaround6_diffupdate()
 	call s:StayOnDiff()
+	call s:TaggedMessage(l:leftmsg, l:rightmsg)
 	return v:true
 endfunction
 
@@ -904,7 +920,8 @@ function! s:Undo() abort
 		return v:false
 	endif
 
-	let l:msg = ''
+	let l:leftmsg = ''
+	let l:rightmsg = ''
 	while v:true
 		let entry = s:undo_stack[-1]
 		let localwin = entry.winid == win_getid()
@@ -918,20 +935,16 @@ function! s:Undo() abort
 		endif
 
 		if localwin
-			silent undo
+			let l:msg = trim(execute('silent undo'))
 		else
-			call win_execute(entry.winid, 'noautocmd silent undo')
+			let l:msg = trim(win_execute(entry.winid, 'noautocmd silent undo'))
+		endif
+		if !empty(l:msg)
+			execute 'let ' . (entry.winid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
 		endif
 
 		call remove(s:undo_stack, -1)
-		if entry.grouped
-			if empty(l:msg)
-				let l:msg = 'both windows'
-			endif
-		else
-			if empty(l:msg)
-				let l:msg = (win_id2win(entry.winid) == 1 ? 'left' : 'right') . ' window'
-			endif
+		if !entry.grouped
 			break
 		endif
 	endwhile
@@ -940,7 +953,7 @@ function! s:Undo() abort
 	" Decide cursor position based on the last undo (entry.winid)
 	call s:Workaround6_diffupdate(entry.winid)
 	call s:StayOnDiff()
-	call s:Message('Undid last edit in ' . l:msg)
+	call s:TaggedMessage(l:leftmsg, l:rightmsg)
 	return v:true
 endfunction
 
