@@ -284,7 +284,7 @@ function! s:ShowHelp() abort
 	endfor
 
 	if l:start < 0
-		call s:Message('WED011: "Introduction:" help section not found.')
+		call s:Message('WED011: "Introduction:" help section not found')
 		return
 	endif
 
@@ -373,40 +373,51 @@ endfunction
 " tags.
 " left/right: The messages for the left/right windows
 function! s:TaggedMessage(left, right) abort
-	let l:leftmsg = empty(a:left) ? '' : substitute(a:left, '^\|\n\zs', 'left: ', 'g')
-	let l:rightmsg = empty(a:right) ? '' : substitute(a:right, '^\|\n\zs', 'right: ', 'g')
+	let l:leftmsg = empty(a:left) ? '' : "left:\n" . a:left
+	let l:rightmsg = empty(a:right) ? '' : "right:\n" . a:right
 	call s:Message(l:leftmsg . "\n" . l:rightmsg)
 endfunction
 
 " Message {{{1
-" Helper that removes Vim context from messages, and adds suitable highlighting
+" Helper that removes Vim context from messages and adds highlighting.
 " msg: The message to be printed
 function! s:Message(msg) abort
 	let l:lines = split(trim(a:msg), "\n")
-	let l:info = ''
-	let l:warning = ''
+	" Match window tag left: or right:
+	let l:tag_pat = '^\%(left:\|right:\)$'
+	" Match warnings like W10 or WED001
+	let l:warn_pat = '^W[A-Z]*\d\+'
 
 	" redraw to avoid the prompt 'Press ENTER or type command to continue'
 	redraw
 	for l:line in l:lines
-		let l:line = substitute(l:line, 'line\s\+\d\+:\s*\|.*Error.* function.*:.*', '', '')
+		" Remove Vim context
+		let l:line = substitute(l:line, 'line\s\+\d\+:\s*\|Error.* function.*:.*', '', 'g')
 		if empty(l:line)
 			continue
 		endif
-		if l:line =~# '^\(\(left\|right\): \)\?W[A-Z]*\d\+:'
-			let l:warning .= (empty(l:warning) ? '' : '. ') . l:line
-		else
-			let l:info .= (empty(l:info) ? '' : '. ') . l:line
+		" highlight any tag
+		let l:tag_match = matchstr(l:line, l:tag_pat)
+		if !empty(l:tag_match)
+			echohl EasyDiffWindowTag
+			echon l:tag_match
+			echohl None
+			echon ' '
+			let l:line = strpart(l:line, len(l:tag_match))
 		endif
+		if empty(l:line)
+			continue
+		endif
+		" highlight any warning
+		if l:line =~# l:warn_pat
+			echohl WarningMsg
+			echon l:line . '. '
+			echohl None
+		else
+			echon l:line . '. '
+		endif
+		let l:tag_match = ''
 	endfor
-	if !empty(l:warning)
-		echohl WarningMsg
-		echomsg l:warning
-		echohl None
-	endif
-	if !empty(l:info)
-		echo l:info
-	endif
 endfunction
 
 " ResetUndoTracking {{{1
@@ -415,7 +426,7 @@ endfunction
 " msg: Warning portion of the reset message.
 function! s:ResetUndoTracking(msg) abort
 	let s:undo_stack = []
-	call s:Message(a:msg . ' Reset undo tracking.')
+	call s:Message(a:msg . ' Reset undo tracking')
 	return v:false
 endfunction
 
@@ -1308,6 +1319,9 @@ function! s:DiffModeSetup() abort
 		return
 	endif
 	let w:diff_setup_done = 1
+
+	" highlight for window tags ('right:' or 'left:') in messages
+	highlight EasyDiffWindowTag cterm=bold ctermfg=Black ctermbg=Yellow gui=bold guifg=Black guibg=Yellow
 
 	" A Non-zero scrolloff affects cursorbind which is vital to EasyDiff.
 	" See 'Implementation Notes' Workaround7.
