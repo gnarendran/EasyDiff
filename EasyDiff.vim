@@ -240,8 +240,8 @@
 "   See:
 "   https://github.com/vim/vim/issues/20950
 "   https://github.com/neovim/neovim/issues/41172
-" - NOTE4: There is a bug in the message issued by delete when the buffer
-"   becomes empty, both in Vim 9.2.920 and Neovim 0.12.4. See:
+" - NOTE4: Both in Vim and Neovim, :delete reports one fewer line when deleting
+"   the entire buffer, but :undo on an empty buffer reports correctly. See:
 "   https://github.com/vim/vim/issues/21049
 "   https://github.com/neovim/neovim/issues/41306
 
@@ -261,9 +261,12 @@ let s:editor_version = ''
 " grouped:false, marking where the compound undo should stop.
 " Undo() only succeeds if the buffer is still at the changenr.
 let s:undo_stack = []
-" leftwinid and rightwinid are used to validate the integrity of undo_stack
+" leftwinid and rightwinid used to validate the integrity of undo_stack
 let s:leftwinid = ''
 let s:rightwinid = ''
+" lefttag and righttag used to highlight messages from respective windows
+let s:lefttag = "\nleft:\n"
+let s:righttag = "\nright:\n"
 
 " ShowHelp {{{1
 " Presents the help information from the beginning of this file
@@ -368,16 +371,6 @@ function! s:Workaround6_diffupdate(...) abort
 	endif
 endfunction
 
-" TaggedMessage {{{1
-" Helper that combines the messages for left and right windows with suitable
-" tags.
-" left/right: The messages for the left/right windows
-function! s:TaggedMessage(left, right) abort
-	let l:leftmsg = empty(a:left) ? '' : "left:\n" . a:left
-	let l:rightmsg = empty(a:right) ? '' : "right:\n" . a:right
-	call s:Message(l:leftmsg . "\n" . l:rightmsg)
-endfunction
-
 " Message {{{1
 " Helper that removes Vim context from messages and adds highlighting.
 " msg: The message to be printed
@@ -403,11 +396,9 @@ function! s:Message(msg) abort
 			echon l:tag_match
 			echohl None
 			echon ' '
-			let l:line = strpart(l:line, len(l:tag_match))
-		endif
-		if empty(l:line)
 			continue
 		endif
+
 		" highlight any warning
 		if l:line =~# l:warn_pat
 			echohl WarningMsg
@@ -416,7 +407,6 @@ function! s:Message(msg) abort
 		else
 			echon l:line . '. '
 		endif
-		let l:tag_match = ''
 	endfor
 endfunction
 
@@ -426,7 +416,7 @@ endfunction
 " msg: Warning portion of the reset message.
 function! s:ResetUndoTracking(msg) abort
 	let s:undo_stack = []
-	call s:Message(a:msg . ' Reset undo tracking')
+	call s:Message(a:msg)
 	return v:false
 endfunction
 
@@ -438,22 +428,22 @@ function! s:DiffStateValid() abort
 	echo ''
 	" Exactly two diff windows?
 	if winnr('$') != 2
-		return s:ResetUndoTracking('WED001: EasyDiff requires exactly two windows.')
+		return s:ResetUndoTracking('WED001: EasyDiff requires exactly two windows; Reset undo tracking')
 	endif
 	" Both must be diff windows.
 	if !getwinvar(1, '&diff') || !getwinvar(2, '&diff')
-		return s:ResetUndoTracking('WED002: EasyDiff requires both windows to be in diff mode.')
+		return s:ResetUndoTracking('WED002: EasyDiff requires both windows to be in diff mode; Reset undo tracking')
 	endif
 	" Both must have cursorbind set.
 	if !getwinvar(1, '&cursorbind') || !getwinvar(2, '&cursorbind')
-		return s:ResetUndoTracking('WED003: EasyDiff requires ''set cursorbind'' in both windows.')
+		return s:ResetUndoTracking('WED003: EasyDiff requires ''set cursorbind'' in both windows; Reset undo tracking')
 	endif
 	if index(split(&diffopt, ','), 'filler') < 0
-		return s:ResetUndoTracking('WED004: EasyDiff requires ''set diffopt+=filler''.')
+		return s:ResetUndoTracking('WED004: EasyDiff requires ''set diffopt+=filler''; Reset undo tracking')
 	endif
 	" Must be a vertical split (same top row).
 	if win_screenpos(1)[0] != win_screenpos(2)[0]
-		return s:ResetUndoTracking('WED005: EasyDiff requires vertical diff split.')
+		return s:ResetUndoTracking('WED005: EasyDiff requires vertical diff split; Reset undo tracking')
 	endif
 
 	let l:curleftwinid = win_getid(1)
@@ -461,14 +451,14 @@ function! s:DiffStateValid() abort
 	if empty(s:leftwinid) || empty(s:rightwinid)
 		if !empty(s:undo_stack)
 			" Cannot happen; ResetUndoTracking and continue
-			call s:ResetUndoTracking('WED006: Inconsistent state of window(s).')
+			call s:ResetUndoTracking('WED006: Inconsistent state of window(s); Reset undo tracking')
 		endif
 		let s:leftwinid = l:curleftwinid
 		let s:rightwinid = l:currightwinid
 	elseif s:leftwinid != l:curleftwinid || s:rightwinid != l:currightwinid
 		let s:leftwinid = l:curleftwinid
 		let s:rightwinid = l:currightwinid
-		return s:ResetUndoTracking('WED007: One or both windows changed.')
+		return s:ResetUndoTracking('WED007: One or both windows changed; Reset undo tracking')
 	endif
 
 	return v:true
@@ -667,20 +657,12 @@ function! s:MergeDiff(right) abort
 	endif
 
 	" See 'Implementation Notes' NOTE2
-	if targetwinid == curwinid
-		let l:msg = trim(execute(action))
-	else
-		let l:msg = trim(win_execute(targetwinid, action))
-	endif
-
+	let l:msg = targetwinid == curwinid ? trim(execute(action)) : trim(win_execute(targetwinid, action))
 	let changed_winid = a:right ? (curwinnr == 1 ? otherwinid : curwinid) : (curwinnr == 1 ? curwinid : otherwinid)
 	call s:RecordEdit(curwinid, changed_winid, v:false)
 	call s:StayOnDiff()
-	let l:leftmsg = ''
-	let l:rightmsg = ''
 	if !empty(l:msg)
-		execute 'let ' . (changed_winid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
-		call s:TaggedMessage(l:leftmsg, l:rightmsg)
+		call s:Message((changed_winid == s:leftwinid ? s:lefttag : s:righttag) . l:msg)
 	endif
 	return v:true
 endfunction
@@ -864,7 +846,11 @@ function! s:DeleteDiffInBothWindows() abort
 		let l:msg = trim(execute(cmd1))
 		call s:RecordEdit(curwinid, curwinid, v:false)
 		if !empty(l:msg)
-			execute 'let ' . (curwinid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
+			if curwinid == s:leftwinid
+				let l:leftmsg = s:lefttag . l:msg
+			else
+				let l:rightmsg = s:righttag . l:msg
+			endif
 		endif
 	endif
 	if !empty(cmd2)
@@ -872,7 +858,11 @@ function! s:DeleteDiffInBothWindows() abort
 		let l:msg = trim(win_execute(otherwinid, cmd2))
 		call s:RecordEdit(curwinid, otherwinid, !empty(cmd1))
 		if !empty(l:msg)
-			execute 'let ' . (otherwinid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
+			if otherwinid == s:leftwinid
+				let l:leftmsg = s:lefttag . l:msg
+			else
+				let l:rightmsg = s:righttag . l:msg
+			endif
 		endif
 	endif
 
@@ -880,7 +870,7 @@ function! s:DeleteDiffInBothWindows() abort
 	diffupdate
 	call s:Workaround6_diffupdate()
 	call s:StayOnDiff()
-	call s:TaggedMessage(l:leftmsg, l:rightmsg)
+	call s:Message(l:leftmsg . l:rightmsg)
 	return v:true
 endfunction
 
@@ -904,19 +894,16 @@ function! s:DeleteDiffInCurrentWindow() abort
 
 	" Delete the Diff in current window and RecordEdit
 	"See 'Implementation Notes' NOTE2
-	let l:leftmsg = ''
-	let l:rightmsg = ''
 	let l:msg = trim(execute(printf('noautocmd silent %d,%ddelete', start1, end1)))
 	call s:RecordEdit(curwinid, curwinid, v:false)
-	if !empty(l:msg)
-		execute 'let ' . (curwinid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
-	endif
 
 	" As this edit wasn't a diff operation, force diffupdate
 	diffupdate
 	call s:Workaround6_diffupdate()
 	call s:StayOnDiff()
-	call s:TaggedMessage(l:leftmsg, l:rightmsg)
+	if !empty(l:msg)
+		call s:Message((curwinid == s:leftwinid ? s:lefttag : s:righttag) . l:msg)
+	endif
 	return v:true
 endfunction
 
@@ -942,7 +929,13 @@ function! s:Undo() abort
 			" Proactive diffupdate preserves the next message. See
 			" 'Implementation notes'
 			diffupdate
-			return s:ResetUndoTracking('WED010: Manual edit or undo detected.')
+			let l:warning = 'WED010: Manual edit or undo detected; Reset undo tracking'
+			if entry.winid == s:leftwinid
+				let l:leftmsg = s:lefttag . l:warning
+			else
+				let l:rightmsg = s:righttag . l:warning
+			endif
+			return s:ResetUndoTracking(l:leftmsg . l:rightmsg)
 		endif
 
 		if localwin
@@ -951,7 +944,11 @@ function! s:Undo() abort
 			let l:msg = trim(win_execute(entry.winid, 'noautocmd silent undo'))
 		endif
 		if !empty(l:msg)
-			execute 'let ' . (entry.winid == s:leftwinid ? 'l:leftmsg' : 'l:rightmsg') . '= l:msg'
+			if entry.winid == s:leftwinid
+				let l:leftmsg = s:lefttag . l:msg
+			else
+				let l:rightmsg = s:righttag . l:msg
+			endif
 		endif
 
 		call remove(s:undo_stack, -1)
@@ -964,7 +961,7 @@ function! s:Undo() abort
 	" Decide cursor position based on the last undo (entry.winid)
 	call s:Workaround6_diffupdate(entry.winid)
 	call s:StayOnDiff()
-	call s:TaggedMessage(l:leftmsg, l:rightmsg)
+	call s:Message(l:leftmsg . l:rightmsg)
 	return v:true
 endfunction
 
