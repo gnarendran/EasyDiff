@@ -34,8 +34,10 @@
 "   <S-Home>	- Move cursor to the other window (normal mode)
 "   <F1>		- Print this help message (normal mode)
 "   Notes: {{{2
-"   - The key bindings are restricted to the two diff'ed buffers. Movement keys
-"     are enabled for visual mode as well.
+"   - The key bindings are restricted to the two diff'ed buffers.
+"   - Other key bindings are not affected. Particularly,
+"     `h`/`j`/`k`/`l`/`<C-f>`/`<C-b>`/`0`/`$`/`x` continue to provide the original
+"     functions of `<Left>`/`<Down>`/`<Up>`/`<Right>`/`<PageDown>`/`<PageUp>`/`<Home>`/`<End>`/`<Delete>`.
 "   - A Diff includes both modified text and deleted lines (Fillers). For
 "     example to delete the lines in the right window that correspond to filler
 "     lines in the left window, simply press <Right>. EasyDiff automatically
@@ -335,7 +337,7 @@ endfunction
 " See 'Implementation Notes' Workaround6
 " This function is also used in other contexts to enforce line correspondence.
 " winid (optional): id of the edited window; defaults to id of current window
-" Even though win_execute could be used on winid without distingushing between
+" Even though win_execute could be used on winid without distinguishing between
 " current and other window, we do make that distinction as mostly current window
 " is the target, where we can avoid the overhead of win_execute.
 function! s:Workaround6_diffupdate(...) abort
@@ -355,7 +357,7 @@ function! s:Workaround6_diffupdate(...) abort
 			let curline = diff_filler(1) + 1
 			call win_execute(otherwinid, 'noautocmd silent normal! ' . curline . 'G')
 		endif
-		" if there are no lines, we consider there is no correpondence.
+		" if there are no lines, we consider there is no correspondence.
 		return
 	endif
 

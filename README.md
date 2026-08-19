@@ -49,7 +49,8 @@ source /path/to/EasyDiff.vim
 | `<F1>` | Print help message *(normal mode)* |
 
 > **Notes on Bindings:**
-> * These keybindings are restricted to the two diffed buffers.
+> * These key bindings are restricted to the two diffed buffers.
+> * Other key bindings are not affected. Particularly, `h`/`j`/`k`/`l`/`<C-f>`/`<C-b>`/`0`/`$`/`x` continue to provide the original functions of `<Left>`/`<Down>`/`<Up>`/`<Right>`/`<PageDown>`/`<PageUp>`/`<Home>`/`<End>`/`<Delete>`.
 > * A **Diff** is a contiguous region identified by Vim's diff engine. It may consist of one or more changed, added, or filler regions. For example, to delete lines in the right window that correspond to filler lines in the left window, simply press `<Right>`. EasyDiff automatically executes `dp` (or `do` from the right window) to produce the expected result.
 > * `<Delete>` deletes the Diff **only** in the current window. If the deleted Diff is adjacent to an existing Filler, Vim/Neovim merges the new and existing Fillers into a single, larger Diff. Then the new larger Diff may be merged with the other window using `<Left>` or `<Right>`.
 > * `<S-Delete>` first finds the full extent of the Diff in current window, including any Filler. Then it deletes this extent from **both** windows.
