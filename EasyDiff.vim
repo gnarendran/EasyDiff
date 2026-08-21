@@ -19,6 +19,9 @@
 "     manually invoking :diffthis in both vertical splits.
 "   - Requires the default diff options `set cursorbind` and
 "     `set diffopt+=filler` to remain unmodified.
+"   - When the `diffopt+=linematch:{n}` is specified, for correct alignment Vim
+"     and Neovim expect `{n}` to be greater than twice the number of lines in
+"     the largest diff hunk.
 " Key Bindings: {{{1
 "   <Right>	- Merge Diff from the left window to the Right window (normal mode)
 "   <Left>	- Merge Diff from the right window to the Left window (normal mode)
@@ -438,7 +441,7 @@ function! s:Workaround9_diffgetput(msg) abort
 	" append after stripping history/snapshot metadata. 'report' is not
 	" honored intentionally, as the messages are useful to keep track of
 	" the merges.
-	return a:msg . "\n" . substitute(diffmsg, '; after.*', '', '')
+	return a:msg . "\n" . substitute(diffmsg, '\v; (after|before) #\d+.*', '', '')
 endfunction
 
 " Message {{{1

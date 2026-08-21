@@ -9,7 +9,7 @@
 * Supports navigation between Diffs (First, Last, Previous, Next) with `<Home>`, `<End>`, `<Up>`, `<Down>` keys.
 * The keys are context aware; for example, regardless of whether the cursor is in the left or right window, `<Right>` will merge the Diff from the left window to the right. Similarly, `<Backspace>` undoes the merges and deletes across the two windows, independent of whether the window is left or right. `<Backspace>` atomically undoes two-sided deletes performed with `<S-Delete>`.
 * Handles all possible configurations of Diffs. When the cursor line represents multiple Diffs (previous filler, changed/added or EOF filler), the user is prompted to identify the target Diff for merge/delete operations.
-* Automatically adapts to diffopt+=linematch:{n}, handling both grouped and split diffs transparently.
+* Automatically adapts to `diffopt+=linematch:{n}`, handling both grouped and split diffs transparently.
 * The movement keys are enabled in visual mode as well; for example, one can select (visual) a Diff with `<PageUp>V<PageDown>`
 
 ---
@@ -28,6 +28,7 @@ source /path/to/EasyDiff.vim
 * Requires Vim 9.2 or Neovim 0.11.6 (the tested versions). EasyDiff might work in lower versions, but any issues found in lower versions are out of scope of this plugin.
 * Requires **exactly two vertically split windows**, both in diff mode. Diffs may be opened directly using `vim -d`, `nvim -d`, or `vimdiff`, or by manually invoking `:diffthis` in both vertical splits.
 * Requires the default diff options `set cursorbind` and `set diffopt+=filler` to remain unmodified.
+* When the `diffopt+=linematch:{n}` is specified, for correct alignment Vim and Neovim expect `{n}` to be greater than twice the number of lines in the largest diff hunk.
 ---
 
 ## Key Bindings
