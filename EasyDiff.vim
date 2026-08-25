@@ -78,8 +78,8 @@
 "     <Left>, <Delete> or <S-Delete>, allowing them to be repeatedly undone
 "     using <Backspace>. Performing any manual edit will reset this edit
 "     tracking.
-"   - The default key bindings may not suit all workflows. Mappings can be
-"     customized inside s:DiffModeSetup()
+"   - The default key bindings may not suit all workflows. Mapping keys can be
+"     customized in s:easydiff_mappings
 "   - Non-zero scrolloff is known to affect cursorbind in some cases (for eg.
 "     when one window is not able to scroll). As cursorbind is essential for
 "     correct EasyDiff operations, it is recommended to keep the setting
@@ -1400,55 +1400,97 @@ function! s:EndAction() abort
 	return v:true
 endfunction
 
+" EasyDiff Mappings {{{1
+" Single source of truth for EasyDiff mappings; empty 'mode' implies all n/x/s/o
+" modes; empty 'noremap' implies remap.
+let s:easydiff_mappings = [
+      \ {'key': '<Right>',    'map': '<Cmd>call <SID>MergeDiff(v:true)<CR>',           'mode': 'n', 'noremap': 'nore'},
+      \ {'key': '<Left>',     'map': '<Cmd>call <SID>MergeDiff(v:false)<CR>',          'mode': 'n', 'noremap': 'nore'},
+      \ {'key': '<Del>',      'map': '<Cmd>call <SID>DeleteAction()<CR>',              'mode': 'n', 'noremap': 'nore'},
+      \ {'key': '<S-Del>',    'map': '2<Del>',                                         'mode': 'n', 'noremap': '' },
+      \ {'key': '<BS>',       'map': '<Cmd>call <SID>Undo()<CR>',                      'mode': 'n', 'noremap': 'nore'},
+      \ {'key': '<PageUp>',   'map': '<Cmd>call <SID>JumpToDiffStart(v:true)<CR>',     'mode': '',  'noremap': 'nore'},
+      \ {'key': '<PageDown>', 'map': '<Cmd>call <SID>JumpToDiffEnd(v:true)<CR>',       'mode': '',  'noremap': 'nore'},
+      \ {'key': '<Home>',     'map': '<Cmd>call <SID>HomeAction()<CR>',                'mode': '',  'noremap': 'nore'},
+      \ {'key': '<S-Home>',   'map': '2<Home>',                                        'mode': '',  'noremap': '' },
+      \ {'key': '<End>',      'map': '<Cmd>call <SID>EndAction()<CR>',                 'mode': '',  'noremap': 'nore'},
+      \ {'key': '<S-End>',    'map': '2<End>',                                         'mode': '',  'noremap': '' },
+      \ {'key': '<Up>',       'map': '<Cmd>call <SID>JumpToPreviousDiff(v:true)<CR>',  'mode': '',  'noremap': 'nore'},
+      \ {'key': '<Down>',     'map': '<Cmd>call <SID>JumpToNextDiff(v:true)<CR>',      'mode': '',  'noremap': 'nore'},
+      \ {'key': '<F1>',       'map': '<Cmd>call <SID>ShowHelp()<CR>',                  'mode': 'n', 'noremap': 'nore'},
+      \ ]
+
 " DiffModeSetup {{{1
 " Sets up EasyDiff mappings in diff windows and jumps to start of first Diff.
 function! s:DiffModeSetup() abort
-	if !&diff || exists('w:diff_setup_done')
-		return
-	endif
-	let w:diff_setup_done = 1
-
-	" highlight for window tags ('right:' or 'left:') in messages
-	highlight EasyDiffWindowTag cterm=bold ctermfg=Black ctermbg=Yellow gui=bold guifg=Black guibg=Yellow
-
-	" A Non-zero scrolloff affects cursorbind which is vital to EasyDiff.
-	" See 'Implementation Notes' Workaround7.
-	setlocal scrolloff=0
-
-	if empty(s:editor_version)
-		if has('nvim')
-			let s:editor_version = 'Neovim ' . matchstr(execute('version'), 'NVIM v\zs[^\n]*')
-			if !has('nvim-0.11.6')
-				call s:Message('WED008: EasyDiff untested on Neovim versions earlier than 0.11.6')
-			endif
-		else
-			if exists('v:versionlong')
-				let s:editor_version = 'Vim ' . printf('%d.%d.%d', v:versionlong / 1000000, (v:versionlong / 10000) % 100, v:versionlong % 10000)
+	if &diff && !exists('b:easydiff_saved_mappings')
+		" 1. one-time global settings
+		if empty(s:editor_version)
+			if has('nvim')
+				let s:editor_version = 'Neovim ' . matchstr(execute('version'), 'NVIM v\zs[^\n]*')
+				if !has('nvim-0.11.6')
+					call s:Message('WED008: EasyDiff untested on Neovim versions earlier than 0.11.6')
+				endif
 			else
-				let s:editor_version = 'Vim ' . printf('%d.%d', v:version / 100, v:version % 100)
+				if exists('v:versionlong')
+					let s:editor_version = 'Vim ' . printf('%d.%d.%d', v:versionlong / 1000000, (v:versionlong / 10000) % 100, v:versionlong % 10000)
+				else
+					let s:editor_version = 'Vim ' . printf('%d.%d', v:version / 100, v:version % 100)
+				endif
+				if v:version < 902
+					call s:Message('WED009: EasyDiff untested on Vim versions earlier than 9.2')
+				endif
 			endif
-			if v:version < 902
-				call s:Message('WED009: EasyDiff untested on Vim versions earlier than 9.2')
-			endif
+			" highlight for window tags ('right:' or 'left:') in messages
+			highlight EasyDiffWindowTag cterm=bold ctermfg=Black ctermbg=Yellow gui=bold guifg=Black guibg=Yellow
 		endif
+
+		" 2. Buffer local settings that will be reverted when diff mode
+		"    is toggled.
+		" 2.1. A Non-zero scrolloff affects cursorbind which is vital to
+		"      EasyDiff. See 'Implementation Notes' Workaround7. First
+		"      save existing scrolloff.
+		let b:easydiff_saved_scrolloff = &l:scrolloff
+		setlocal scrolloff=0
+
+		" 2.2. Before creating EasyDiff mappings, save existing mappings
+		let b:easydiff_saved_mappings = []
+		for l:map in s:easydiff_mappings
+			" Save any previous mapping
+			let l:modes = empty(l:map.mode) ? [ 'n', 'x', 's', 'o'] : [l:map.mode]
+			for l:mode in l:modes
+				let l:map_info = maparg(l:map.key, l:mode, 0, 1)
+				" Only save as an existing map IF it was
+				" defined in this specific buffer
+				if !empty(l:map_info) && get(l:map_info, 'buffer', 0)
+					call add(b:easydiff_saved_mappings, l:map_info)
+				else
+					" If global or unmapped (ie. no prior
+					" buffer-local mapping exists), mark it
+					" for unmapping on nodiff
+					call add(b:easydiff_saved_mappings, {'key': l:map.key, 'mode': l:mode, 'unmap': 1})
+				endif
+			endfor
+			" Apply the buffer-local mapping
+			execute l:map.mode . l:map.noremap . 'map <buffer> ' . l:map.key . ' ' . l:map.map
+		endfor
+		call s:JumpToFirstDiff(v:false)
+	elseif !&diff && exists('b:easydiff_saved_mappings')
+		" Restore scrolloff that we no longer need it to be 0
+		execute 'setlocal scrolloff=' . b:easydiff_saved_scrolloff
+
+		for l:map_info in b:easydiff_saved_mappings
+			if get(l:map_info, 'unmap', 0)
+				" Remove mapping that had no prior buffer-local mapping
+				execute l:map_info.mode . 'unmap <buffer> '. l:map_info.key
+			else
+				" Restore previous buffer-local mapping
+				call mapset(l:map_info)
+			endif
+		endfor
+		echo 'EasyDiff disabled in buffer'
+		unlet b:easydiff_saved_mappings
 	endif
-
-	nnoremap <buffer> <Right>    <Cmd>call <SID>MergeDiff(v:true)<CR>
-	nnoremap <buffer> <Left>     <Cmd>call <SID>MergeDiff(v:false)<CR>
-	nnoremap <buffer> <Del>      <Cmd>call <SID>DeleteAction()<CR>|	"Overloaded using count
-	nmap     <buffer> <S-Del>    2<Del>|				"Convenient if terminal supports <S-Del>
-	nnoremap <buffer> <BS>       <Cmd>call <SID>Undo()<CR>
-	noremap  <buffer> <PageUp>   <Cmd>call <SID>JumpToDiffStart(v:true)<CR>
-	noremap  <buffer> <PageDown> <Cmd>call <SID>JumpToDiffEnd(v:true)<CR>
-	noremap  <buffer> <Home>     <Cmd>call <SID>HomeAction()<CR>|	"Overloaded using count
-	map      <buffer> <S-Home>   2<Home>|				"Convenient if terminal supports <S-Home>
-	noremap  <buffer> <End>      <Cmd>call <SID>EndAction()<CR>|	"Overloaded using count
-	map      <buffer> <S-End>    2<End>|				"Convenient if terminal supports <S-End>
-	noremap  <buffer> <Up>       <Cmd>call <SID>JumpToPreviousDiff(v:true)<CR>|	"Accepts count
-	noremap  <buffer> <Down>     <Cmd>call <SID>JumpToNextDiff(v:true)<CR>|		"Accepts count
-	nnoremap <buffer> <F1>       <Cmd>call <SID>ShowHelp()<CR>
-
-	call s:JumpToFirstDiff(v:false)
 endfunction
 
 " DiffModeSetupInAllWindows {{{1

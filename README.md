@@ -83,6 +83,6 @@ let g:easydiff_stay_on_diff = 0
 ## Limitations
 
 * **Edit Tracking & Undo:** EasyDiff tracks edits (merges/deletes) performed using `<Right>`, `<Left>`, `<Delete>` or `<S-Delete>`, allowing them to be repeatedly undone using `<Backspace>`. **Note:** Performing any manual edit will reset this edit tracking.
-* **Custom Mappings:** The default key bindings may not suit all workflows. Mappings can be customized inside `s:DiffModeSetup()`.
+* **Custom Mappings:** The default key bindings may not suit all workflows. Mappings can be customized in `s:easydiff_mappings`.
 * Non-zero scrolloff is known to affect cursorbind in some cases in both Vim and Neovim. As cursorbind is essential for correct EasyDiff operations, it is recommended to keep `setlocal scrolloff=0` in both windows.
 * Due to an upstream Vim/Neovim rendering quirk, an EOF filler may not be visible by default even though EasyDiff tracks it correctly; press `<C-e>` to reveal it.
