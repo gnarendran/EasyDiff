@@ -71,6 +71,8 @@ source /path/to/EasyDiff.vim
 > * At start, the cursor is automatically placed on the first Diff in all diff windows.
 
 ### Merge commands and window selection
+EasyDiff prefixes window numbers to every diff window's statusline. This number is used to address the target and operating windows, by a simple encoding in the count to the merge commands as described below.
+
 * In 2-way diff (2 diff windows), count need not be specified, and the command decides the direction of Merge, with the current diff window as the operating window, and the other diff window as the target window.
 For example, if 5 is the current window, and 2 the other diff window:
 
@@ -79,7 +81,9 @@ For example, if 5 is the current window, and 2 the other diff window:
 | `<Right>` | target(2) to operating(5) | :diffget will be issued in 5 |
 | `<Left>` | target(2) from operating(5) | :diffput will be issued in 5 |
 
-* In n-way diff (3 or more diff windows), a count can specify the target and operating windows. The count is interpreted as follows:
+* In n-way diff (3 or more diff windows) EasyDiffMergeDiffRight (`<Right>`) merges away from the target window to the operating window (so :diffget will be issued in the operating window). EasyDiffMergeDiffLeft (`<Right>`) merges towards the target window from the operating window (so :diffput will be issued in the operating window).
+
+A count to the merge commands can specify the target and operating window numbers, as follows:
 
 | Count | Target window | Operating window |
 | :--- | :--- | :--- |
@@ -97,6 +101,9 @@ For example, with four diff windows with numbers 1, 3, 4, 10, and 4 being the cu
 | `3<Right>` | target(3) to operating(4) | :diffget will be issued in 4 |
 | `34<Right>` | target(3) to operating(4) | :diffget will be issued in 4 |
 | `34<Left>` | target(3) from operating(4) | :diffput will be issued in 4 |
+| `13<Right>` | target(1) to operating(3) | :diffget will be issued in 3 |
+| `13<Left>` | target(1) from operating(3) | :diffput will be issued in 3 |
+| `310<Left>` | target(3) from operating(10) | :diffput will be issued in 10 |
 | `410<Right>` | target(4) to operating(10) | :diffget will be issued in 10 |
 | `1004<Right>` | target(10) to operating(4) | :diffget will be issued in 4 |
 | `1004<Left>` | target(10) from operating(4) | :diffput will be issued in 4 |
@@ -114,7 +121,7 @@ For example, with four diff windows with numbers 1, 3, 4, 10, and 4 being the cu
 `EasyDiffJumpToWindow` (`<Space>`) accepts a count specifying the diff window to which the cursor should move. For example, `3<Space>` moves the cursor to the corresponding line in diff window 3; once there, it moves the cursor according to `g:easydiff_stay_on_diff`. Vim/Neovim's native `[winnr]<C-w>w` could instead be used to switch windows without readjusting the cursor position.
 
 ### Jumping to alternate window
-`EasyDiffJumpToAlternateWindow` (`<S-Home>`) moves cursor to the corresponding line in the alternate diff window; once there, moves cursor as per variable `g:easydiff_stay_on_diff`. Vim/Neovim's native `<C-w>w` could instead be used to switch windows without readjusting the cursor position.
+`EasyDiffJumpToAlternateWindow` (`<S-Home>`) moves cursor to the corresponding line in the alternate diff window; once there, moves cursor as per variable `g:easydiff_stay_on_diff`. Vim/Neovim's native `<C-w>p` could instead be used to switch windows without readjusting the cursor position.
 
 ---
 
