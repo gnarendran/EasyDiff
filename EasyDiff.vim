@@ -37,7 +37,7 @@
 "  EasyDiffJumpToNextDiff			<Down>		Jump to the next Diff (accepts count) (normal and visual modes)
 "  EasyDiffJumpToWindow			<Space>		Move cursor to a specific diff window (accepts count; normal mode)
 "  EasyDiffJumpToAlternateWindow		<S-Home>	Move cursor to the alternate diff window (normal mode)
-"  EasyDiffToggleStayOnDiff		<S-End>		Toggles the `g:easydiff_stay_on_diff` variable between 1 (default) and 2 (normal mode)
+"  EasyDiffToggleStayOnDiff		<S-End>		Toggles the `g:easydiff_stay_on_diff` variable between 1 (default) and 0 (normal mode)
 "  EasyDiffHelp				<F1>		Print this help message (normal mode)
 "   Notes: {{{2
 "   - The default key bindings may be disabled by setting the variable
@@ -128,14 +128,13 @@
 "     edit tracking.
 "   - Non-zero scrolloff is known to affect cursorbind in some cases (for eg.
 "     when one window is not able to scroll). As cursorbind is essential for
-"     correct EasyDiff operations, it is recommended to keep the setting
-"     `setlocal scrolloff=0` in all diff windows.
+"     correct EasyDiff operations, EasyDiff executes `setlocal scrolloff=0` in
+"     all diff windows.
 "   - Vim/Neovim suppress messages from :delete when upto 'report' lines are
 "     deleted. But messages from undo or redo (and hence from merges) are not
 "     similarly suppressed. However, in n-way Diff especially, messages from
-"     merge/delete/undo serve as a useful feedback. It is therefore desirable to
-"     keep the setting `set report=0`, so that none of these messages are
-"     suppressed.
+"     merge/delete/undo serve as a useful feedback. So, to ensure that none of
+"     these messages are suppressed, EasyDiff executes `set report=0` at start.
 "   - Due to an upstream Vim/Neovim rendering quirk, an EOF filler may not be
 "     visible by default even though EasyDiff tracks it correctly; press <C-e>
 "     to reveal it.
@@ -414,18 +413,6 @@ function! s:WinEval(winid, expr) abort
 	return result
 endfunction
 
-" SetPosLine {{{1
-" Helper for s:MergeDiff()
-" Uses normal j or k to change current line without resetting curswant.
-" curline: line number to move cursor to
-function! s:SetPosLine(curline)
-	let offset = a:curline - line('.')
-	if offset != 0
-		let cmd = offset > 0 ? (offset . 'j') : (-offset . 'k')
-		execute 'noautocmd silent keepjumps normal! ' . cmd
-	endif
-endfunction
-
 " ToggleCursor {{{1
 " Helper for various functions.
 " See 'Implementation Notes' Workaround1. Toggle cursor vertically to make
@@ -448,25 +435,22 @@ function! s:ToggleCursor() abort
 	let curwinnr = winnr()
 	let largest_winid = 0
 	let largest_winline = 0
-	let largest_winoffset = 0
 	for winnr in range(1, winnr('$'))
 		if winnr == curwinnr || !getwinvar(winnr, '&diff')
 			continue
 		endif
 		let winid = win_getid(winnr)
-		let lastline = line('$', winid)
-		let lastwinline = screenpos(winid, lastline, 1).row
+		let lastwinline = screenpos(winid, line('$', winid), 1).row
 		if largest_winline < lastwinline
 			let largest_winid = winid
 			let largest_winline = lastwinline
-			let largest_winoffset = lastline - line('.', winid)
 		endif
 	endfor
 	" - move to its last line, tickle cursorbind awake with a
 	"   [curwinnr]<C-w>w (within win_execute, <C-w><C-w> doesn't work
 	"   instead), and thus ensure the correspondence.
-	if largest_winoffset > 0
-		call win_execute(largest_winid, 'noautocmd silent normal! ' . largest_winoffset . 'j' . curwinnr . "\<C-w>w")
+	if largest_winline > 0
+		call win_execute(largest_winid, 'noautocmd silent keepjumps normal! G' . curwinnr . "\<C-w>w")
 		" If current window's winline had been ever larger, its line
 		" would've been moved up by cursorbind. Its column would've been
 		" moved even otherwise. So restore them. Note that this doesn't
@@ -799,13 +783,13 @@ function! s:MergeDiffDispatcher(right) abort
 	endif
 
 	let l:right = a:right
-	" The spec should have 1, 2 or 4 digits to unambiguously encode target
-	" and operating window numbers. If it has 1 digit, it represents the
-	" target window number, and the current window is assumed to be the
-	" operating window. If it has 2 digits, the first/second digits
-	" represent the target and operating window numbers. If it has 4 digits,
-	" the first/last two digits represent the target/operating window
-	" numbers. This encoding can thus support window numbers upto 99.
+	" The spec unambiguously encodes target and operating window numbers
+	" (upto 99) as follows: If it has 1 digit, the it represents the target
+	" window number, and the current window is assumed to be the operating
+	" window. If it has 2 digits, the first/second digits represent the
+	" target/operating window numbers. If it has 3 or 4 digits, the last two
+	" digits represent the operating window number and the remaining leading
+	" digits represent the target window number.
 	if spec <= 9
 		let restorewinnr = 0
 		let operwinnr = winnr()
@@ -823,11 +807,11 @@ function! s:MergeDiffDispatcher(right) abort
 		if spec <= 99
 			let operwinnr = spec % 10
 			let targetwinnr = spec / 10
-		elseif spec >= 1000 && spec <= 9999
+		elseif spec >= 100 && spec <= 9999
 			let operwinnr = spec % 100
 			let targetwinnr = spec / 100
 		else
-			echo 'count must have 1, 2 or 4 digits'
+			echo 'count can have only upto 4 digits'
 			return v:false
 		endif
 		if restorewinnr == operwinnr
@@ -898,6 +882,7 @@ function! s:RangeCorrespondingToFiller(otherwinid, before, winstart) abort
 					" even if it becomes >end and invalidates range.
 					let start += 1
 				endif
+				" start == 0 is valid and equivalent to start == 1 in range
 			endif
 		else
 			" When current window is empty, there is no
@@ -992,9 +977,12 @@ function! s:MergeDiff(otherwinnr, curwinnr, right) abort
 		let operwinid = curwinid
 		if filler_after && has('nvim') && !has('nvim-0.12')
 			" See 'Implementation Notes' Workaround5
-			call s:JumpToDiffStart(v:false)
+			let pos = getcurpos()
+			" Go to the start of diff to find the start position
+			silent! normal! [c]c
 			let action = printf('noautocmd silent %d,%d%s %d', line('.'), curline, (a:right ? 'diffget' : 'diffput'), winbufnr(a:otherwinnr))
-			call s:SetPosLine(curline)
+			" Restore pos
+			call s:CommitCursorMove(pos, pos[1], v:false)
 		else
 			" See 'Implementation Notes' NOTE2
 			let action = printf('noautocmd silent %s %d', (a:right ? 'diffget' : 'diffput'), winbufnr(a:otherwinnr))
@@ -1840,6 +1828,14 @@ function! s:DiffModeSetup() abort
 					call s:Message('WED009: EasyDiff untested on Vim versions earlier than 9.2')
 				endif
 			endif
+			" Messages from :delete are suppressed when upto
+			" 'report' lines are deleted. As these messages serve as
+			" a feedback that is helpful especially in n-way diff,
+			" setting report to 0, and letting the user toggle/set
+			" it if needed.
+			let s:saved_report = &report
+			set report=0
+
 			" highlight for window tags ('right:' or 'left:') in messages
 			highlight link EasyDiffWinTag StatusLine
 			highlight link EasyDiffWinTagNC StatusLineNC
@@ -1858,12 +1854,6 @@ function! s:DiffModeSetup() abort
 		"      save existing scrolloff.
 		let b:easydiff_saved_scrolloff = &l:scrolloff
 		let &l:scrolloff=0
-		" 2.2. Messages from :delete are suppressed when upto 'report'
-		"      lines are deleted. As these messages serve as a feedback
-		"      that is helpful especially in n-way diff, setting report
-		"      to 0, and letting the user toggle/set it if needed.
-		let s:saved_report = &report
-		set report=0
 
 		let b:easydiff_saved_statusline = &l:statusline
 		let &l:statusline = '%{winnr()}: %<' . (empty(&l:statusline) ? &statusline : &l:statusline)
