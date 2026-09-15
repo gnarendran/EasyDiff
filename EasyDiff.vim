@@ -5,145 +5,239 @@
 "           in vimrc ($XDG_CONFIG_HOME/vim/vimrc maybe) or init.nvim (say
 "           $XDG_CONFIG_HOME/nvim/init.vim), or drop it in the plugin directory.
 "********************************************************************************
-" Introduction: {{{1
-"   EasyDiff provides a simplified keyboard interface for resolving diffs in Vim
-"   and Neovim. It abstracts Vim's mnemonic diff commands behind an intuitive
-"   cursor-key interface, simplifying navigation within and between diffs and
-"   making repetitive merge, delete, and undo operations faster.
-" Requirements: {{{1
-"   - Requires Vim 9.2 or Neovim 0.12.0 (the tested versions). EasyDiff might
-"     work in lower versions, but any issues found in lower versions are out of
-"     scope of this plugin.
-"   - Requires at least two windows in diff mode. All diff windows must be
-"     in a single row of vertical splits. The diff windows may be set up
-"     directly using vim -d, nvim -d, or vimdiff, or by manually invoking
-"     :diffthis.
-"   - Requires the default diff options `set cursorbind` and
-"     `set diffopt+=filler` to remain unmodified.
-"   - When the `diffopt+=linematch:{n}` is specified, for correct alignment Vim
-"     and Neovim expect `{n}` to be greater than the product of the number of
-"     diff windows and the number of lines in the largest diff hunk.
-" Commands and Default Key Bindings: {{{1
-"  EasyDiffMergeDiffRight			<Right>		In 2-way diff: Merge current Diff from the left window to the right window; n-way diff: away from target window towards operating window (accepts count; normal mode)
-"  EasyDiffMergeDiffLeft			<Left>		In 2-way diff: Merge current Diff from the right window to the left window; n-way diff: towards target window away from operating window (accepts count; normal mode)
-"  EasyDiffDeleteDiffInCurrentWindow	<Delete>	Delete the Diff in the current window (normal mode)
-"  EasyDiffDeleteDiffInAllWindows		<S-Delete>	Delete the Diff in all diff windows (normal mode)
-"  EasyDiffUndo				<Backspace>	Undo the last Merge or Delete (normal mode)
-"  EasyDiffJumpToDiffStart		<PageUp>	Jump to the start of the current Diff (normal and visual modes)
-"  EasyDiffJumpToDiffEnd			<PageDown>	Jump to the end of the current Diff (normal and visual modes)
-"  EasyDiffJumpToFirstDiff		<Home>		Jump to the first Diff (normal and visual modes)
-"  EasyDiffJumpToLastDiff			<End>		Jump to the last Diff (normal and visual modes)
-"  EasyDiffJumpToPreviousDiff		<Up>		Jump to the previous Diff (accepts count) (normal and visual modes)
-"  EasyDiffJumpToNextDiff			<Down>		Jump to the next Diff (accepts count) (normal and visual modes)
-"  EasyDiffJumpToWindow			<Space>		Move cursor to a specific diff window (accepts count; normal mode)
-"  EasyDiffJumpToAlternateWindow		<S-Home>	Move cursor to the alternate diff window (normal mode)
-"  EasyDiffToggleStayOnDiff		<S-End>		Toggles the `g:easydiff_stay_on_diff` variable between 1 (default) and 0 (normal mode)
-"  EasyDiffHelp				<F1>		Print this help message (normal mode)
-"   Notes: {{{2
-"   - The default key bindings may be disabled by setting the variable
-"     `let g:easydiff_enable_default_mappings = 0` and mapping custom
-"     alternatives to the commands directly; for example, this maps `<Leader>h`
-"     instead of the default `<F1>`: `noremap <Leader>h <Cmd>EasyDiffHelp<CR>`
-"     It is also possible to retain the default mappings but only customize some
-"     of them in `s:easydiff_default_mappings` in EasyDiff.vim
-"   - The default key bindings are restricted to the two diff'ed buffers.
-"     Preexisting key bindings are restored when diff is disabled.
-"   - Other key bindings are not affected. Particularly,
-"     `h`/`j`/`k`/`l`/`<C-f>`/`<C-b>`/`0`/`$`/`x` continue to provide the
-"     original functions of
-"     `<Left>`/`<Down>`/`<Up>`/`<Right>`,`<Space>`/`<PageDown>`/`<PageUp>`/`<Home>`/`<End>`/`<Delete>`.
-"   - A Diff is a contiguous region identified by Vim's diff engine. It may
-"     consist of one or more changed, added, or filler regions. For example, in
-"     2-way diff, to delete lines in the right window that correspond to filler
-"     lines in the left window, invoke `EasyDiffMergeDiffRight` (`<Right>`).
-"     EasyDiff automatically executes `diffput` (or `diffget` from the other
-"     window) to produce the expected result.
-"   - In 2-way diffs, without count, `EasyDiffMergeDiffRight` (`<Right>`) /
-"     `EasyDiffMergeDiffRight` (`<Left>`) merge towards right/left.
-"   - In n-way diff (n>2), `EasyDiffMergeDiffRight` (`<Right>`) and
-"     `EasyDiffMergeDiffLeft` (`<Left>`) accept a count to select the target and
-"     operating windows. A single digit count specifies the target window number
-"     and the operating window is the current window. For example, `3<Right>`
-"     merges the Diff from target window 3 to the current (operating) window.
-"     With two digits, the first digit is the target window and the second is
-"     the operating window; for example, `34<Right>` merges from target window 3
-"     to operating window 4. With four digits the first two digits encode the
-"     target window, and the last two the operating window; for example
-"     `1002<Right>` merges from target window 10 to operating window 2. The
-"     direction determines whether the merge is away from (`<Right>`) or towards
-"     (`<Left>`) the target window.
-"   - `EasyDiffDeleteDiffInCurrentWindow` (`<Delete>`) deletes the Diff only
-"     in the current window. If the deleted Diff is adjacent to an existing
-"     Filler, Vim/Neovim combines the new and existing Fillers into a single,
-"     larger Diff. Then the new larger Diff may be merged with the other window
-"     using `EasyDiffMergeDiffLeft` (`<Left>`) or `EasyDiffMergeDiffRight`
-"     (`<Right>`).
-"   - `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`) first finds the full
-"     extent of the Diff in current window, including any Filler. Then it
-"     deletes this extent from all diff windows.
-"   - `EasyDiffUndo` (`<Backspace>`) undoes all the deletions in diff windows
-"     performed by a single EasyDiffDeleteDiffInAllWindows (`<S-Delete>`). To
-"     only undo one of those deletes, one has to manually undo using 'u', but
-"     that will reset EasyDiff's undo tracking.
-"   - At start, the cursor is automatically placed on the first Diff in all diff
-"     windows.
-"   - `EasyDiffJumpToAlternateWindow` (`<S-Home>`) moves cursor to the
-"     corresponding line in the alternate diff window; once there, moves cursor
-"     as per variable `g:easydiff_stay_on_diff`. Vim/Neovim's native `<C-w>w`
-"     could instead be used to switch windows without readjusting the cursor
-"     position.
-"   - `EasyDiffJumpToWindow` (`<Space>`) accepts a count that specifies the
-"     diff window to move the cursor to. For example, `3<Space>` moves cursor to
-"     the corresponding line in diff window 3; once there, it moves the cursor
-"     as per the variable `g:easydiff_stay_on_diff`.
-"   - If the terminal does not support the shifted default key bindings
-"     `<S-Home>`, `<S-Delete>` and `<S-End>`, default alternatives `2<Home>`,
-"     `2<Delete>` and `2<End>` may be used.
-"   - For convenience (not essential to EasyDiff operations), these additional
-"     default mappings are provided: `3<End>` to toggle 'linematch' diffopt;
-"     `4<End>` to toggle 'set number'; `5<End>` to toggle 'report' between 0 and
-"     the saved value (or 2).
-" Variables: {{{1
-"    let g:easydiff_enable_default_mappings = 1
-"    - (Default) Enables the default key bindings for the EasyDiff commands
-"    let g:easydiff_enable_default_mappings = 0
-"    - If set during initialization, disables the default key bindings for the
-"      EasyDiff commands. The user can provide their custom mappings for
-"      these commands.
+" Introduction {{{1
+"  EasyDiff provides a simplified keyboard interface for resolving diffs in Vim
+"  and Neovim. It abstracts Vim's mnemonic diff commands behind an intuitive
+"  cursor-key interface, simplifying navigation within and between diffs and
+"  making repetitive merge, delete, and undo operations faster.
 "
-"    let g:easydiff_stay_on_diff = 1
-"    - (Default) After a Diff Merge, Delete, Undo, or window switch, keep the
-"      cursor on a Diff: if it is not already on a Diff, move it to the next
-"      Diff; if there is no next Diff, move it to the last Diff.
-"    let g:easydiff_stay_on_diff = 0
-"    - After a Diff Merge, Delete, Undo or window switch, no attempt is made to
-"      keep the cursor on a Diff.
+" Requirements {{{1
+" ‾‾‾‾‾‾‾‾‾‾‾‾
+" - Requires Vim 9.2 or Neovim 0.12.0 (the tested versions). EasyDiff might work
+"   in lower versions, but any issues found in lower versions are out of scope
+"   of this plugin.
+" - Requires at least two windows in diff mode in the tab. All diff windows in a
+"   tab must be in the same row of vertical splits. Non-diff windows may also be
+"   present in vertical or horizontal splits.
+" - The diff windows may be set up directly using vim -d, nvim -d, or vimdiff,
+"   or by manually invoking :diffthis.
+" - Requires the default diff options `set cursorbind` and `set diffopt+=filler`
+"   to remain unmodified.
+" - When the `diffopt+=linematch:{n}` is specified, for correct alignment Vim
+"   and Neovim expect `{n}` to be greater than the product of the number of diff
+"   windows and the number of lines in the largest diff hunk.
 "
-" Limitations: {{{1
-"   - Vim and Neovim support up to 8 diff windows in a tab, though there is no
-"     limitation on the number of non-diff windows.
-"   - EasyDiff tracks the edits (Merges/Deletes) performed using <Right>,
-"     <Left>, <Delete> or <S-Delete>, allowing them to be repeatedly undone
-"     using <Backspace>. But manual edits that change changenr, will reset this
-"     edit tracking.
-"   - Non-zero scrolloff is known to affect cursorbind in some cases (for eg.
-"     when one window is not able to scroll). As cursorbind is essential for
-"     correct EasyDiff operations, EasyDiff executes `setlocal scrolloff=0` in
-"     all diff windows.
-"   - Vim/Neovim suppress messages from :delete when upto 'report' lines are
-"     deleted. But messages from undo or redo (and hence from merges) are not
-"     similarly suppressed. However, in n-way Diff especially, messages from
-"     merge/delete/undo serve as a useful feedback. So, to ensure that none of
-"     these messages are suppressed, EasyDiff executes `set report=0` at start.
-"   - Due to an upstream Vim/Neovim rendering quirk, an EOF filler may not be
-"     visible by default even though EasyDiff tracks it correctly; press <C-e>
-"     to reveal it.
-"   - Vim (up to 9.2.914) and Neovim (up to 0.12.6) are affected by an upstream
-"     issue ([Vim #20950][1], [Neovim #41172][2]) where `:undo`, after a
-"     `:diffget` into an empty buffer, leaves an extra line behind. There is no
-"     workaround in EasyDiff for this issue.
+" Terminology {{{1
+" ‾‾‾‾‾‾‾‾‾‾‾
+" - A Diff is a contiguous region identified by Vim's diff engine. It may
+"   consist of one or more of changed, added, or filler regions.
+" - 2-way diff refers to diff operations in a tab containing exactly two diff
+"   windows
+" - n-way diff refers to diff operations in a tab containing more than two diff
+"   windows
+" - **Operating window** refers to the diff window where the :diffget and
+"   :diffput commands are executed.
+" - **Target window** refers to the diff window containing the other buffer
+"   whose number will be specified as argument to :diffget or :diffput.
+" - A Merge from **Target window** to **Operating window** copies text in the
+"   current Diff from the former to the latter. It is achieved by issuing
+"   :diffget in the **Operating window**. If the Diff includes a filler in the
+"   **Target window**, Merge deletes the corresponding text in the **Operating
+"   window**.
+" - A Merge to **Target window** from **Operating window** copies text in the
+"   current Diff to the former from the latter. It is achieved by issuing
+"   :diffput in the **Operating window**. If the Diff includes a filler in the
+"   **Operating window**, Merge deletes the the corresponding text in the
+"   **Target window**
+" - The default key mappings for the commands are shown in brackets.
 "
-" Implementation Notes: {{{1
+" Commands and Default Key Bindings {{{1
+" ‾‾‾‾‾‾‾‾ ‾‾‾ ‾‾‾‾‾‾‾ ‾‾‾ ‾‾‾‾‾‾‾‾
+"	Command					Default Key	Action
+"	‾‾‾‾‾‾‾					‾‾‾‾‾‾‾ ‾‾‾	‾‾‾‾‾‾
+"	`EasyDiffMergeDiffRight`		`<Right>`	2-way diff: Merge from **left** diff window to **right** diff window; n-way diff: from **Target window** to **Operating window** *(accepts count; normal mode)*. See 'Merge commands and window selection'
+"	`EasyDiffMergeDiffLeft`			`<Left>`	2-way diff: Merge to **left** diff window from **right** diff window; n-way diff: to **Target window** from **Operating window** *(accepts count; normal mode)*. See 'Merge commands and window selection'
+"	`EasyDiffDeleteDiffInCurrentWindow`	`<Delete>`	Delete the current Diff only in the current window *(normal mode)*. See 'Deleting Diff in current window'
+"	`EasyDiffDeleteDiffInAllWindows`	`<S-Delete>`	Delete the current Diff in all diff windows *(normal mode)*. See 'Deleting Diff in all windows'
+"	`EasyDiffUndo`				`<Backspace>`	Undo the last merge or delete *(normal mode)*. See 'Undoing last merge or delete'
+"	`EasyDiffJumpToDiffStart`		`<PageUp>`	Jump to the **start** of the current Diff *(normal and visual modes)*
+"	`EasyDiffJumpToDiffEnd`			`<PageDown>`	Jump to the **end** of the current Diff *(normal and visual modes)*
+"	`EasyDiffJumpToFirstDiff`		`<Home>`	Jump to the **first** Diff *(normal and visual modes)*
+"	`EasyDiffJumpToLastDiff`		`<End>`		Jump to the **last** Diff *(normal and visual modes)*
+"	`EasyDiffJumpToPreviousDiff`		`<Up>`		Jump to the **previous** Diff *(accepts count; normal and visual modes)*
+"	`EasyDiffJumpToNextDiff`		`<Down>`	Jump to the **next** Diff *(accepts count; normal and visual modes)*
+"	`EasyDiffJumpToWindow`			`<Space>`	Move cursor to a specific diff window *(accepts count; normal mode)*. See 'Jumping to a diff window'
+"	`EasyDiffJumpToAlternateWindow`		`<S-Home>`	Move cursor to the alternate window *(normal mode)*. See 'Jumping to alternate window'
+"	`EasyDiffToggleStayOnDiff`		`<S-End>`	Toggles the `g:easydiff_stay_on_diff` variable between `1` (default) and `0` *(normal mode)*. See 'g:easydiff_stay_on_diff'
+"	`EasyDiffHelp`				`<F1>`		Print help message *(normal mode)*
+"
+" Notes on the Commands and Bindings {{{2
+" ‾‾‾‾‾ ‾‾ ‾‾‾ ‾‾‾‾‾‾‾‾ ‾‾‾ ‾‾‾‾‾‾‾‾
+" - The default key bindings may be disabled by setting the variable
+"   `let g:easydiff_enable_default_mappings = 0` and mapping custom alternatives
+"   to the commands directly; for example, this maps `<Leader>h` instead of the
+"   default `<F1>`: `noremap <Leader>h <Cmd>EasyDiffHelp<CR>`. It is also
+"   possible to retain the default mappings but only customize some of them in
+"   `s:easydiff_default_mappings` in EasyDiff.vim
+" - The default key bindings are restricted to the two diff'ed buffers.
+"   Preexisting key bindings are restored when diff is disabled.
+" - Other key bindings are not affected. Particularly,
+"   `h`/`j`/`k`/`l`/`<C-f>`/`<C-b>`/`0`/`$`/`x` continue to provide the original
+"   functions of `<Left>`/`<Down>`/`<Up>`/`<Right>`,`<Space>`/`<PageDown>`/`<PageUp>`/`<Home>`/`<End>`/`<Delete>`.
+" - If the terminal does not support the shifted default key bindings
+"   `<S-Home>`, `<S-Delete>` and `<S-End>`, default alternatives `2<Home>`,
+"   `2<Delete>` and `2<End>` may be used.
+" - For convenience (not essential to EasyDiff operations), these additional
+"   default mappings are provided: `3<End>` to toggle 'linematch' diffopt;
+"   `4<End>` to toggle 'set number'; `5<End>` to toggle 'report' between 0 and
+"   the saved value (or 2).
+" - At start, the cursor is automatically placed on the first Diff in all diff
+"   windows.
+"
+" Merge commands and window selection {{{2
+" ‾‾‾‾‾ ‾‾‾‾‾‾‾‾ ‾‾‾ ‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾
+" - EasyDiff prefixes window numbers to every diff window's statusline. This
+"   number is used to address the **Target** and **Operating windows**, by a
+"   simple encoding in the count to the merge commands, as described below.
+" - In 2-way diff, count need not be specified, and the command decides the
+"   direction of Merge, with the current diff window as the **Operating
+"   window**, and the other diff window as the **Target window**.
+"
+"   For example, if 5 is the current window, and 2 the other diff window:
+"	Key		Merge Direction					Command Execution
+"	‾‾‾		‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾					‾‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾
+"	<Right>		from **Target**(2) to **Operating**(5)		:diffget is executed in 5
+"	<Left>		to **Target**(2) from **Operating**(5)		:diffput is executed in 5
+"
+" - In n-way diff (3 or more diff windows) `EasyDiffMergeDiffRight` (`<Right>`)
+"   merges from the **Target window** to the **Operating window** (so :diffget
+"   is executed in the **Operating window**). `EasyDiffMergeDiffLeft`
+"   (`<Right>`) merges to the **Target window** from the **Operating window**
+"   (so :diffput is executed in the **Operating window**).
+"
+"   A count to the merge commands can specify the **Target** and **Operating
+"   window** numbers, as follows:
+"	Count			**Target window**		**Operating window**
+"	‾‾‾‾‾			‾‾‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾		‾‾‾‾‾‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾
+"	None			1 (by default)			Current window
+"	One digit		The single digit		Current window
+"	Two digits		First digit			Second digit
+"	Three/Four digits	First one or two digits		Last two digits
+
+"   For example, with four diff windows with numbers 1, 3, 4, 10, and 4 being
+"   the current window:
+"	Key		Merge Direction					Command Execution
+"	‾‾‾		‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾					‾‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾
+"	`<Right>`	from **Target**(1) to **Operating**(4)		:diffget is executed in 4
+"	`<Left>`	to **Target**(1) from **Operating**(4)		:diffput is executed in 4
+"	`3<Right>`	from **Target**(3) to **Operating**(4)		:diffget is executed in 4
+"	`3<Left>`	to **Target**(3) from **Operating**(4)		:diffput is executed in 4
+"	`34<Right>`	from **Target**(3) to **Operating**(4)		:diffget is executed in 4
+"	`34<Left>`	to **Target**(3) from **Operating**(4)		:diffput is executed in 4
+"	`13<Right>`	from **Target**(1) to **Operating**(3)		:diffget is executed in 3
+"	`13<Left>`	to **Target**(1) from **Operating**(3)		:diffput is executed in 3
+"	`310<Right>`	from **Target**(3) to **Operating**(10)		:diffget is executed in 10
+"	`310<Left>`	to **Target**(3) from **Operating**(10)		:diffput is executed in 10
+"	`410<Right>`	from **Target**(4) to **Operating**(10)		:diffget is executed in 10
+"	`410<Left>`	to **Target**(4) from **Operating**(10)		:diffput is executed in 10
+"	`1001<Right>`	from **Target**(10) to **Operating**(1)		:diffget is executed in 1
+"	`1001<Left>`	to **Target**(10) from **Operating**(1)		:diffput is executed in 1
+"	`1004<Right>`	from **Target**(10) to **Operating**(4)		:diffget is executed in 4
+"	`1004<Left>`	to **Target**(10) from **Operating**(4)		:diffput is executed in 4
+
+" - When **Operating window** is different from the current window, the cursor
+"   movements in **Operating window** due to Merge and subsequently due to
+"   `g:easydiff_stay_on_diff`, will cause cursor to move correspondingly in the
+"   current window due to cursorbind.
+"
+" Deleting Diff in current window {{{2
+" ‾‾‾‾‾‾‾‾ ‾‾‾‾ ‾‾ ‾‾‾‾‾‾‾ ‾‾‾‾‾‾
+" - `EasyDiffDeleteDiffInCurrentWindow` (`<Delete>`) deletes the Diff **only**
+"   in the current window. If the deleted Diff is adjacent to an existing
+"   Filler, Vim/Neovim combines the new and existing Fillers into a single,
+"   larger Diff. Then the new larger Diff may be further merged with another
+"   window using `EasyDiffMergeDiffLeft` (`<Left>`) or `EasyDiffMergeDiffRight`
+"   (`<Right>`).
+
+" Deleting Diff in all windows {{{2
+" ‾‾‾‾‾‾‾‾ ‾‾‾‾ ‾‾ ‾‾‾ ‾‾‾‾‾‾‾
+" - `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`) first finds the full extent
+"   of the Diff in current window, including any Filler. Then it deletes this
+"   extent from **all** diff windows.
+
+" Undoing last merge or delete {{{2
+" ‾‾‾‾‾‾‾ ‾‾‾‾ ‾‾‾‾‾ ‾‾ ‾‾‾‾‾‾
+" - `EasyDiffUndo` (`<Backspace>`) undoes merges and deletes across window
+"   boundaries. It atomically undoes all the deletions in diff windows performed
+"   by a single `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`). To only undo
+"   one of those deletes, one may manually undo using Vim/Neovim's native 'u',
+"   but that will reset EasyDiff's undo tracking.
+
+" Jumping to a diff window {{{2
+" ‾‾‾‾‾‾‾ ‾‾ ‾ ‾‾‾‾ ‾‾‾‾‾‾
+" - `EasyDiffJumpToWindow` (`<Space>`) accepts a count specifying the diff
+"   window to which the cursor should move. For example, `3<Space>` moves the
+"   cursor to the corresponding line in diff window 3; once there, it moves the
+"   cursor according to `g:easydiff_stay_on_diff`. Vim/Neovim's native
+"   `[winnr]<C-w>w` could instead be used to switch windows without readjusting
+"   the cursor position.
+
+" Jumping to alternate window {{{2
+" ‾‾‾‾‾‾‾ ‾‾ ‾‾‾‾‾‾‾‾‾ ‾‾‾‾‾‾
+" - `EasyDiffJumpToAlternateWindow` (`<S-Home>`) moves cursor to the
+"   corresponding line in the alternate diff window; once there, moves cursor as
+"   per variable `g:easydiff_stay_on_diff`. Vim/Neovim's native `<C-w>p` could
+"   instead be used to switch windows without readjusting the cursor position.
+
+" Configuration Variables {{{1
+" ‾‾‾‾‾‾‾‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾
+" `g:easydiff_enable_default_mappings`
+" - Enables or disables the default keybindings for the EasyDiff commands:
+"  let g:easydiff_enable_default_mappings = 1
+"  - (Default) Enables the default key bindings for the EasyDiff commands
+"  let g:easydiff_enable_default_mappings = 0
+"  - If set during initialization, disables the default key bindings for the
+"    EasyDiff commands. The user can provide their custom mappings for these
+"    commands.
+"
+" `g:easydiff_stay_on_diff`
+" - Controls cursor positioning after an edit or window switch:
+"  let g:easydiff_stay_on_diff = 1
+"  - (Default) After a Diff Merge, Delete, Undo, or window switch, keep the
+"    cursor on a Diff: if it is not already on a Diff, move it to the next Diff;
+"    if there is no next Diff, move it to the last Diff.
+"  let g:easydiff_stay_on_diff = 0
+"  - After a Diff Merge, Delete, Undo or window switch, no attempt is made to
+"    keep the cursor on a Diff.
+"
+" Limitations {{{1
+" ‾‾‾‾‾‾‾‾‾‾‾
+" - Vim and Neovim support up to 8 diff windows in a tab, though there is no
+"   limitation on the number of non-diff windows.
+" - EasyDiff tracks edits (merges/deletes) performed using
+"   `EasyDiffMergeDiffRight` (`<Right>`), `EasyDiffMergeDiffLeft` (`<Left>`),
+"   `EasyDiffDeleteDiffInCurrentWindow` (`<Delete>`) or
+"   `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`), allowing them to be
+"   repeatedly undone using `EasyDiffUndo` (`<Backspace>`). But manual edits
+"   that change changenr, will reset this edit tracking.
+" - Non-zero scrolloff is known to affect cursorbind in some cases in both Vim
+"   and Neovim. As cursorbind is essential for correct EasyDiff operations,
+"   EasyDiff executes `setlocal scrolloff=0` in all diff windows.
+" - Vim/Neovim suppress messages from :delete when upto 'report' lines are
+"   deleted. But messages from undo or redo (and hence from merges) are not
+"   similarly suppressed. However, in n-way Diff especially, messages from
+"   merge/delete/undo serve as a useful feedback. So, to ensure that none of
+"   these messages are suppressed, EasyDiff executes `set report=0` at start.
+" - Due to an upstream Vim/Neovim rendering quirk, an EOF filler may not be
+"   visible by default even though EasyDiff tracks it correctly; press `<C-e>`
+"   to reveal it.
+" - Vim (up to 9.2.914) and Neovim (up to 0.12.6) are affected by an upstream
+"   issue ([Vim #20950][1], [Neovim #41172][2]) where `:undo`, after a
+"   `:diffget` into an empty buffer, leaves an extra line behind. There is no
+"   workaround in EasyDiff for this issue.
+"
+" Implementation Notes {{{1
+" ‾‾‾‾‾‾‾‾‾‾‾‾‾‾ ‾‾‾‾‾
 " - Default Mapping Keys have been chosen to avoid confusion with normal editing
 "   commands, especially accidental 'u' instead of the tracked undo of Diff
 "   Merges and Deletes.
@@ -366,9 +460,9 @@ function! s:ShowHelp() abort
 
 	" Find the markers.
 	for i in range(len(lines))
-		if start < 0 && lines[i] =~# '^" Introduction:'
+		if start < 0 && lines[i] =~# '^" Introduction {{{1'
 			let start = i+1
-		elseif start >= 0 && lines[i] =~# '^" Implementation Notes'
+		elseif start >= 0 && lines[i] =~# '^" Implementation Notes {{{1'
 			let end = i
 			break
 		endif
@@ -1718,9 +1812,9 @@ function! s:ToggleSetting(count1) abort
 		else
 			let cmd='setlocal nonumber'
 		endif
-		for win in getwininfo()
-			if getwinvar(win.winnr, '&diff')
-				call win_execute(win.winid, 'noautocmd ' . cmd)
+		for winnr in range(1, winnr('$'))
+			if getwinvar(winnr, '&diff')
+				call win_execute(win_getid(winnr), 'noautocmd ' . cmd)
 			endif
 		endfor
 		echo 'Executed "' . cmd . '" in diff windows'
@@ -1737,6 +1831,19 @@ function! s:ToggleSetting(count1) abort
 		endif
 		noautocmd execute cmd
 		echo 'Executed "' . cmd . '"'
+	elseif a:count1 == 6
+		" Toggle 'list'
+		if &list == 0
+			let cmd='setlocal list'
+		else
+			let cmd='setlocal nolist'
+		endif
+		for winnr in range(1, winnr('$'))
+			if getwinvar(winnr, '&diff')
+				call win_execute(win_getid(winnr), 'noautocmd ' . cmd)
+			endif
+		endfor
+		echo 'Executed "' . cmd . '" in diff windows'
 	endif
 
 	return v:true
@@ -1894,7 +2001,6 @@ function! s:DiffModeSetup() abort
 				call mapset(map_info)
 			endif
 		endfor
-		echo 'EasyDiff disabled in buffer'
 		unlet b:easydiff_saved_mappings
 	endif
 endfunction
