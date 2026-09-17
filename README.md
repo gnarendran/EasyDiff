@@ -18,8 +18,8 @@
 * n-way diff refers to diff operations in a tab containing more than two diff windows
 * **Operating window** refers to the diff window where the :diffget and :diffput commands are executed
 * **Target window** refers to the diff window containing the other buffer whose number will be specified as argument to :diffget or :diffput.
-* A Merge from **Target window** to **Operating window** copies text in the current Diff from the former to the latter. It is achieved by issuing :diffget in the **Operating window**. If the Diff includes a filler in the **Target window**, Merge deletes the corresponding text in the **Operating window**.
-* A Merge to **Target window** from **Operating window** copies text in the current Diff to the former from the latter. It is achieved by issuing :diffput in the **Operating window**. If the Diff includes a filler in the **Operating window**, Merge deletes the the corresponding text in the **Target window**.
+* A Merge from **Target window** to **Operating window** copies text in the current Diff from the former to the latter. It is achieved by issuing :diffget in the **Operating window**. If the Diff includes a filler in the **Target window**, this Merge deletes the corresponding text in the **Operating window**.
+* A Merge to **Target window** from **Operating window** copies text in the current Diff to the former from the latter. It is achieved by issuing :diffput in the **Operating window**. If the Diff includes a filler in the **Operating window**, this Merge deletes the the corresponding text in the **Target window**.
 * The default key mappings for the commands are shown in brackets.
 ---
 ## Features

@@ -104,6 +104,7 @@
 "   window**, and the other diff window as the **Target window**.
 "
 "   For example, if 5 is the current window, and 2 the other diff window:
+"
 "	Key		Merge Direction					Command Execution
 "	‾‾‾		‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾					‾‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾
 "	<Right>		from **Target**(2) to **Operating**(5)		:diffget is executed in 5
@@ -117,6 +118,7 @@
 "
 "   A count to the merge commands can specify the **Target** and **Operating
 "   window** numbers, as follows:
+"
 "	Count			**Target window**		**Operating window**
 "	‾‾‾‾‾			‾‾‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾		‾‾‾‾‾‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾
 "	None			1 (by default)			Current window
@@ -126,6 +128,7 @@
 
 "   For example, with four diff windows with numbers 1, 3, 4, 10, and 4 being
 "   the current window:
+"
 "	Key		Merge Direction					Command Execution
 "	‾‾‾		‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾					‾‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾
 "	`<Right>`	from **Target**(1) to **Operating**(4)		:diffget is executed in 4
@@ -460,9 +463,9 @@ function! s:ShowHelp() abort
 
 	" Find the markers.
 	for i in range(len(lines))
-		if start < 0 && lines[i] =~# '^" Introduction {{{1'
+		if start < 0 && lines[i] =~# '\v^" Introduction \{\{\{1'
 			let start = i+1
-		elseif start >= 0 && lines[i] =~# '^" Implementation Notes {{{1'
+		elseif start >= 0 && lines[i] =~# '\v^" Implementation Notes \{\{\{1'
 			let end = i
 			break
 		endif
