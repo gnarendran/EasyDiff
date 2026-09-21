@@ -298,7 +298,7 @@
 " - Merge Operations:
 "   - The command :diffput merges 'Current Diff' from the current (operating)
 "     window *to* the target window
-"   - The command :diffget merges 'Current Diff' *from* the target window to the 
+"   - The command :diffget merges 'Current Diff' *from* the target window to the
 "     current (operating) window.
 "
 "   As defined, there cannot be a curline following the 'EOF Filler'. So if the
@@ -450,7 +450,9 @@ let t:easydiff_undo_stack = []
 " The following are set by s:DiffStateValid():
 " used by MergeDiff() to detect 2-way diff
 let t:easydiff_windows = 0
-" used by MergeDiff() and StayOnDiff()
+" used instead of winnr(), by various functions
+let t:easydiff_curwinnr = 0
+" used for '#' (or any other valid diff window), by MergeDiff() and StayOnDiff()
 let t:easydiff_otherwinnr = 0
 
 " ShowHelp {{{1
@@ -645,6 +647,7 @@ function! s:Message(msg) abort
 
 	" redraw to avoid the prompt 'Press ENTER or type command to continue'
 	redraw
+	let curwinnr = winnr()
 	for line in lines
 		" Remove Vim context
 		let line = substitute(line, 'line\s\+\d\+:\s*\|Error.* function.*:.*', '', 'g')
@@ -655,7 +658,7 @@ function! s:Message(msg) abort
 		let tag_match = matchstr(line, tag_pat)
 		if !empty(tag_match)
 			" str2nr ignores ':' suffix (if present) in tag_match
-			if str2nr(tag_match) == winnr()
+			if str2nr(tag_match) == curwinnr
 				echohl EasyDiffWinTag
 			else
 				echohl EasyDiffWinTagNC
@@ -718,7 +721,11 @@ function! s:DiffStateValid() abort
 				\ : "WED001: EasyDiff requires 'set diffopt+=filler'."
 
 	let t:easydiff_curwinnr = winnr()
-	let t:easydiff_otherwinnr = 0
+	let t:easydiff_otherwinnr = winnr('#')
+	" If # is not a valid 'other' diff window, choose any other diff window
+	if t:easydiff_otherwinnr == t:easydiff_curwinnr || !getwinvar(t:easydiff_otherwinnr, '&diff')
+		let t:easydiff_otherwinnr = 0
+	endif
 	let t:easydiff_windows = 0
 	let horizontal_splits = 0
 
@@ -731,7 +738,7 @@ function! s:DiffStateValid() abort
 			let msg .= "\n" . winnr . ":\nWED002: diff window requires 'set cursorbind'."
 		endif
 		let t:easydiff_windows += 1
-		if t:easydiff_curwinnr != winnr
+		if t:easydiff_otherwinnr == 0 && winnr != t:easydiff_curwinnr
 			let t:easydiff_otherwinnr = winnr
 		endif
 		if !exists('screenpos')
@@ -821,17 +828,16 @@ function! s:StayOnDiff() abort
 	if !g:easydiff_stay_on_diff
 		return
 	endif
-	let otherwinid = win_getid(t:easydiff_otherwinnr)
 	let pos = getcurpos()
 
 	" Before diff_hlID() is used by s:RepresentsChanged() etc., execute
 	" Workaround4.
-	call s:Workaround4_diff_hlID(otherwinid)
+	call s:Workaround4_diff_hlID(win_getid(t:easydiff_otherwinnr))
 	if !s:RepresentsDiff(pos[1])
 		" cursor not on a Diff, so has to move. One might prefer staying
 		" on previous Added than advancing to next Diff. But that is
 		" impossible to say reliably, as in n-way diff it is not a given
-		" that Filler in otherwinid has corresponding Added in curwinid
+		" that Filler in otherwinnr has corresponding Added in curwinnr
 		" and vice-versa. So just try moving to next Diff, failing which
 		" jump to the previous(last) Diff.
 		silent! keepjumps normal! ]c
@@ -888,8 +894,7 @@ function! s:MergeDiffDispatcher(right) abort
 	" digits represent the operating window number and the remaining leading
 	" digits represent the target window number.
 	if spec <= 9
-		let restorewinnr = 0
-		let operwinnr = winnr()
+		let operwinnr = t:easydiff_curwinnr
 		if spec == 1 && t:easydiff_windows == 2
 			" Simple directional merge for 2-way diff
 			let targetwinnr = t:easydiff_otherwinnr
@@ -899,8 +904,8 @@ function! s:MergeDiffDispatcher(right) abort
 		else
 			let targetwinnr = spec
 		endif
+		let restorewinnr = 0
 	else
-		let restorewinnr = winnr()
 		if spec <= 99
 			let operwinnr = spec % 10
 			let targetwinnr = spec / 10
@@ -911,9 +916,7 @@ function! s:MergeDiffDispatcher(right) abort
 			echo 'count can have only upto 4 digits'
 			return v:false
 		endif
-		if restorewinnr == operwinnr
-			let restorewinnr = 0
-		endif
+		let restorewinnr = operwinnr == t:easydiff_curwinnr ? 0 : t:easydiff_curwinnr
 	endif
 
 	if operwinnr < 1 || operwinnr > winnr('$')
@@ -1015,7 +1018,7 @@ function! s:MergeDiff(otherwinnr, curwinnr, right) abort
 	" Corresponding line in other window may legally be in one of up to
 	" three Diffs. For example, if filler_before && changed && filler_after,
 	" the corresponding line may be in one of previous Added, current
-	" Changed, or next Added. To be deterministic (matters when finding the 
+	" Changed, or next Added. To be deterministic (matters when finding the
 	" corresponding line in the other window), force exact line
 	" correspondence using Workaround6_diffupdate(), even though here we are
 	" really not working around an unexpected behavior.
@@ -1029,7 +1032,7 @@ function! s:MergeDiff(otherwinnr, curwinnr, right) abort
 	let prev_diff = 'k'
 	let next_diff = 'j'
 
-	if !filler_before && changed && !filler_after 
+	if !filler_before && changed && !filler_after
 		let diff = ''
 	elseif filler_before && !changed && !filler_after
 		let diff = prev_diff
@@ -1129,7 +1132,7 @@ endfunction
 
 " LastLineIsADifferentDiff {{{1
 " Helper for s:DeleteDiffInAllWindows() and s:JumpToDiffEnd()
-" When multiple Diffs (Changed, Added, Filler after) overlap at the last line, 
+" When multiple Diffs (Changed, Added, Filler after) overlap at the last line,
 " checks if the last line itself is a separate one line Diff.
 function! s:LastLineIsADifferentDiff() abort
 	" We know we are already at the last line, and that it is is Changed or
@@ -1161,7 +1164,7 @@ function! s:LastLineIsADifferentDiff() abort
 		" - otherwinline is one less than winline, and has fillers
 		"   after: last flipped from Changed to Added.
 		" - otherwinline is equal to winline, and has fillers before:
-		"   last flipped from Added to Changed 
+		"   last flipped from Added to Changed
 		" - otherwinline is more than winline, offset exactly by fillers
 		"   before: last flipped from Changed to Added.
 		if (otherwinline == winline - 1 && otherfiller_after > 0)
@@ -1180,7 +1183,7 @@ function! s:DeleteDiffInAllWindows() abort
 	if !s:DiffStateValid()
 		return v:false
 	endif
-	let curwinnr = winnr()
+	let curwinnr = t:easydiff_curwinnr
 	let curwinid = win_getid(curwinnr)
 	let curline = line('.')
 	let linematch = s:LinematchEnabled()
@@ -1194,7 +1197,7 @@ function! s:DeleteDiffInAllWindows() abort
 	" Corresponding line in other window may legally be in one of up to
 	" three Diffs. For example, if filler_before && changed && filler_after,
 	" the corresponding line may be in one of previous Added, current
-	" Changed, or next Added. To be deterministic (matters when finding the 
+	" Changed, or next Added. To be deterministic (matters when finding the
 	" corresponding line in the other window), force exact line
 	" correspondence using Workaround6_diffupdate(), even though here we are
 	" really not working around an unexpected behavior.
@@ -1372,7 +1375,7 @@ function! s:DeleteDiffInCurrentWindow() abort
 	endif
 	" Below 1 refers to the current window, and 2 the other. So start1 is
 	" the starting line of Diff in the current window and so on.
-	let curwinid = win_getid()
+	let curwinid = win_getid(t:easydiff_curwinnr)
 	let start1 = line('.')
 	call s:JumpToDiffEnd(v:false)
 	let end1 = line('.')
@@ -1387,7 +1390,7 @@ function! s:DeleteDiffInCurrentWindow() abort
 	call s:Workaround6_diffupdate()
 	call s:StayOnDiff()
 	if !empty(msg)
-		call s:Message("\n" . winnr() . ":\n" . msg)
+		call s:Message("\n" . t:easydiff_curwinnr . ":\n" . msg)
 	endif
 	return v:true
 endfunction
@@ -1423,10 +1426,11 @@ function! s:Undo() abort
 	endif
 
 	let msgs = []
+	let curwinid = win_getid(t:easydiff_curwinnr)
+	let action = 'noautocmd silent undo'
 	while v:true
 		let entry = t:easydiff_undo_stack[-1]
-		let localwin = entry.winid == win_getid()
-		let current_changenr = localwin ? changenr() : s:WinEval(entry.winid, 'changenr()')
+		let current_changenr = entry.winid == curwinid ? changenr() : s:WinEval(entry.winid, 'changenr()')
 
 		if entry.changenr != current_changenr
 			call s:PruneUndoMessages(msgs)
@@ -1438,11 +1442,7 @@ function! s:Undo() abort
 			return s:ResetUndoTracking(s:SortMessages(msgs))
 		endif
 
-		if localwin
-			let msg = trim(execute('silent undo'))
-		else
-			let msg = trim(win_execute(entry.winid, 'noautocmd silent undo'))
-		endif
+		let msg = entry.winid == curwinid ? trim(execute(action)) : trim(win_execute(entry.winid, action))
 		call add(msgs, {'winnr': win_id2win(entry.winid), 'msg': msg})
 		call remove(t:easydiff_undo_stack, -1)
 		if !entry.grouped
@@ -1480,7 +1480,7 @@ function! s:CommitCursorMove(frompos, toline, mark) abort
 	call setpos('.', a:frompos)
 	" curswant is a desired screen column for future vertical movements, and
 	" setpos() or cursor() record it but don't honor it. As curswant
-	" frompos[4] is screen col, and frompos[2] is byte col, there is no
+	" frompos[4] is screen col, and frompos[2] is byte index, there is no
 	" clean way to force setpos() to honor curswant. So a subsequent | that
 	" moves to screen column is needed.
 	execute 'normal! ' . a:frompos[4] . '|'
@@ -1729,7 +1729,7 @@ endfunction
 function! s:JumpToWindow() abort
 	let curwinnr = winnr()
 	let otherwinnr = v:count1
-	
+
 	if otherwinnr < 1 || otherwinnr > winnr('$')
 		echo 'Window ' . otherwinnr . ' does not exist'
 		return v:false
@@ -1757,16 +1757,11 @@ function! s:JumpToAlternateWindow() abort
 	if !s:DiffStateValid()
 		return v:false
 	endif
-	let curwinnr = winnr()
-	let otherwinnr = winnr('#')
-
-	if curwinnr == otherwinnr || !getwinvar(otherwinnr, '&diff')
-		let otherwinnr == t:easydiff_otherwinnr
-	endif
+	let otherwinnr = t:easydiff_otherwinnr
 
 	" Force exact line correspondence
 	call s:Workaround6_diffupdate()
-	let t:easydiff_otherwinnr = curwinnr
+	let t:easydiff_otherwinnr = t:easydiff_curwinnr
 	execute 'noautocmd ' . otherwinnr . 'wincmd w'
 	call s:StayOnDiff()
 	echo 'Jumped to window ' . otherwinnr
@@ -2014,6 +2009,10 @@ function! s:DiffModeSetupInAllWindows() abort
 	for win in getwininfo()
 		call win_execute(win.winid, 'noautocmd call <SID>DiffModeSetup()')
 	endfor
+	if getwinvar(winnr(), '&diff')
+		" First diff in current window has the final say on cursor position
+		call s:WithLazyRedraw(function('s:JumpToFirstDiff'), v:false)
+	endif
 endfunction
 
 " augroup EasyDiff {{{1
