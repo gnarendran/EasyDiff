@@ -173,7 +173,8 @@ let g:easydiff_stay_on_diff = 0
 
 * Vim and Neovim support up to 8 diff windows in a tab, though there is no limitation on the number of non-diff windows.
 * EasyDiff tracks edits (merges/deletes) performed using `EasyDiffMergeDiffRight` (`<Right>`), `EasyDiffMergeDiffLeft` (`<Left>`), `EasyDiffDeleteDiffInCurrentWindow` (`<Delete>`) or `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`), allowing them to be repeatedly undone using `EasyDiffUndo` (`<Backspace>`). But manual edits that change changenr, will reset this edit tracking.
-* Non-zero scrolloff is known to affect cursorbind in some cases in both Vim and Neovim. As cursorbind is essential for correct EasyDiff operations, EasyDiff executes `setlocal scrolloff=0` in all diff windows.
+* Non-zero 'wrap' could affect the alignment between the vertically split diff windows. As this alignment is essential for EasyDiff operations, EasyDiff executes `setlocal nowrap` in all diff windows.
+* Non-zero 'scrolloff' is known to affect cursorbind in some cases in both Vim and Neovim. As cursorbind is essential for correct EasyDiff operations, EasyDiff executes `setlocal scrolloff=0` in all diff windows.
 * Vim/Neovim suppress messages from :delete when upto 'report' lines are deleted. But messages from undo or redo (and hence from merges) are not similarly suppressed. However, in n-way Diff especially, messages from merge/delete/undo serve as a useful feedback. So, to ensure that none of these messages are suppressed, EasyDiff executes `set report=0` at start.
 * Due to an upstream Vim/Neovim rendering quirk, an EOF filler may not be visible by default even though EasyDiff tracks it correctly; press `<C-e>` to reveal it.
 * Vim (up to 9.2.914) and Neovim (up to 0.12.6) are affected by an upstream issue ([Vim #20950][1], [Neovim #41172][2]) where `:undo`, after a `:diffget` into an empty buffer, leaves an extra line behind. There is no workaround in EasyDiff for this issue.

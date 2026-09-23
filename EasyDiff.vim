@@ -223,7 +223,10 @@
 "   `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`), allowing them to be
 "   repeatedly undone using `EasyDiffUndo` (`<Backspace>`). But manual edits
 "   that change changenr, will reset this edit tracking.
-" - Non-zero scrolloff is known to affect cursorbind in some cases in both Vim
+" - Non-zero 'wrap' could affect the alignment between the vertically split diff
+"   windows. As this alignment is essential for EasyDiff operations, EasyDiff
+"   executes `setlocal nowrap` in all diff windows.
+" - Non-zero 'scrolloff' is known to affect cursorbind in some cases in both Vim
 "   and Neovim. As cursorbind is essential for correct EasyDiff operations,
 "   EasyDiff executes `setlocal scrolloff=0` in all diff windows.
 " - Vim/Neovim suppress messages from :delete when upto 'report' lines are
@@ -255,10 +258,12 @@
 "   cursorbind (cursor in the local window doesn't move), while win_execute of
 "   the equivalent normal command 'normal! u' triggers cursorbind correctly.
 "   Similarly, :delete and :call setpos() don't wake up cursorbind. But a
-"   subsequent 'normal! kj' (or even 'echo ""') triggers cursorbind and forces
-"   cursor synchronization. This plugin uses normal commands j and k are used
-"   for these cursor movements as they, unlike gg or G, preserve col/curswant
-"   and don't affect the jumplist also.
+"   subsequent 'normal! jk' triggers cursorbind and forces cursor
+"   synchronization. This plugin uses normal commands j and k for these cursor
+"   movements as they, unlike gg or G, preserve col/curswant and don't affect
+"   the jumplist also. But if curline is in a closed fold (this cannot happen if
+"   the curline is a Diff), j or k could jump over the fold - so the fold is
+"   first opened, 'normal! jk' issued, and then the fold is closed.
 " - In Vim/Neovim diff mode, curline is classified into four main categories
 "   based on how it compares with its corresponding line in the other window:
 "   changed:   Differs by at least one character. We refer to a set of
@@ -518,14 +523,26 @@ endfunction
 " cursorbind take effect
 function! s:ToggleCursor() abort
 	let pos = getcurpos()
+	let curline = pos[1]
 	" Toggling up and then down cannot ensure line correspondence in these
 	" cases: In n-way diff when linematch is enabled, consider A-F-U with
 	" cursor at U. Then cursor is trapped in other window by A corresponding
 	" to F, rather than reaching U corresponding to U. So toggle down-up
 	" with normal jk - but this is possible only when curline is not the
-	" last line:
-	if pos[1] < line('$')
+	" last line. Also when curline is not a Diff, it could be in closed
+	" folds - then we need to open the folds so that j won't skip over them,
+	" and then restore them.
+	if curline < line('$')
+		let fold = 0
+		while foldclosed(curline) != -1
+			noautocmd foldopen
+			let fold += 1
+		endwhile
 		noautocmd normal! jk
+		while fold > 0
+			noautocmd foldclose
+			let fold -= 1
+		endwhile
 		return
 	endif
 	" For the last line:
@@ -554,7 +571,7 @@ function! s:ToggleCursor() abort
 		" would've been moved up by cursorbind. Its column would've been
 		" moved even otherwise. So restore them. Note that this doesn't
 		" affect line correspondences established above.
-		call s:CommitCursorMove(pos, pos[1], v:false)
+		call s:CommitCursorMove(pos, curline, v:false)
 	endif
 endfunction
 
@@ -1960,6 +1977,10 @@ function! s:DiffModeSetup() abort
 		let b:easydiff_saved_scrolloff = &l:scrolloff
 		let &l:scrolloff=0
 
+		" 2.2. 'wrap' could affect alignment, and so disallowed
+		let b:easydiff_saved_wrap = &l:wrap
+		let &l:wrap=0
+
 		let b:easydiff_saved_statusline = &l:statusline
 		let &l:statusline = '%{winnr()}: %<' . (empty(&l:statusline) ? &statusline : &l:statusline)
 
@@ -1986,8 +2007,9 @@ function! s:DiffModeSetup() abort
 		endif
 		call s:WithLazyRedraw(function('s:JumpToFirstDiff'), v:false)
 	elseif !&diff && exists('b:easydiff_saved_mappings')
-		" Restore scrolloff that we no longer need it to be 0
+		" Restore settings changed when enabling EasyDiff
 		let &l:scrolloff = b:easydiff_saved_scrolloff
+		let &l:wrap = b:easydiff_saved_wrap
 		let &l:statusline = b:easydiff_saved_statusline
 
 		for map_info in b:easydiff_saved_mappings
