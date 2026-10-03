@@ -55,8 +55,11 @@
 " ‾‾‾‾‾‾‾‾ ‾‾‾ ‾‾‾‾‾‾‾ ‾‾‾ ‾‾‾‾‾‾‾‾
 "	Command					Default Key	Action
 "	‾‾‾‾‾‾‾					‾‾‾‾‾‾‾ ‾‾‾	‾‾‾‾‾‾
-"	`EasyDiffMergeDiffRight`		`<Right>`	2-way diff: Merge from **left** diff window to **right** diff window; n-way diff: from **Target window** to **Operating window** *(accepts count; normal mode)*. See 'Merge commands and window selection'
-"	`EasyDiffMergeDiffLeft`			`<Left>`	2-way diff: Merge to **left** diff window from **right** diff window; n-way diff: to **Target window** from **Operating window** *(accepts count; normal mode)*. See 'Merge commands and window selection'
+"	`EasyDiffMergeDiffRight`		`<Right>`	2-way diff: Merge current Diff from **left** diff window to **right** diff window; n-way diff: from **Target window** to **Operating window** *(accepts count; normal mode)*. See 'Merge commands and window selection'
+"	`EasyDiffMergeDiffLeft`			`<Left>`	2-way diff: Merge current Diff to **left** diff window from **right** diff window; n-way diff: to **Target window** from **Operating window** *(accepts count; normal mode)*. See 'Merge commands and window selection'
+"	`EasyDiffMergeAllRight`			`<S-Right>`	2-way diff: Merge all Diffs from **left** diff window to **right** diff window; n-way diff: from **Target window** to **Operating window** *(accepts count; normal mode)*. See 'Merge commands and window selection'
+"	`EasyDiffMergeAllLeft`			`<S-Left>`	2-way diff: Merge all Diffs to **left** diff window from **right** diff window; n-way diff: to **Target window** from **Operating window** *(accepts count; normal mode)*. See 'Merge commands and window selection'
+"	`EasyDiffRepeatMerge`			`<Enter>`	Repeat the previous Merge command *(normal mode)*. See 'Merge commands and window selection'
 "	`EasyDiffDeleteDiffInCurrentWindow`	`<Delete>`	Delete the current Diff only in the current window *(normal mode)*. See 'Deleting Diff in current window'
 "	`EasyDiffDeleteDiffInAllWindows`	`<S-Delete>`	Delete the current Diff in all diff windows *(normal mode)*. See 'Deleting Diff in all windows'
 "	`EasyDiffUndo`				`<Backspace>`	Undo the last merge or delete *(normal mode)*. See 'Undoing last merge or delete'
@@ -82,11 +85,14 @@
 " - The default key bindings are restricted to the two diff'ed buffers.
 "   Preexisting key bindings are restored when diff is disabled.
 " - Other key bindings are not affected. Particularly,
-"   `h`/`j`/`k`/`l`/`<C-f>`/`<C-b>`/`0`/`$`/`x` continue to provide the original
-"   functions of `<Left>`/`<Down>`/`<Up>`/`<Right>`,`<Space>`/`<PageDown>`/`<PageUp>`/`<Home>`/`<End>`/`<Delete>`.
+"   `h`/`j`/`k`/`l`/`<C-f>`/`<C-b>`/`0`/`$`/`x`/`w`/`b`/`+` continue to provide
+"   the original functions of
+"   `<Left>`/`<Down>`/`<Up>`/`<Right>`,`<Space>`/`<PageDown>`/`<PageUp>`/`<Home>`/`<End>`/`<Delete>`/`<S-Right>`/`<S-Left>`/`<Enter>`.
 " - If the terminal does not support the shifted default key bindings
 "   `<S-Home>`, `<S-Delete>` and `<S-End>`, default alternatives `2<Home>`,
-"   `2<Delete>` and `2<End>` may be used.
+"   `2<Delete>` and `2<End>` may be used. In the case of `<S-Right>` and
+"   `<S-Left>` the user may setup alternative mappings for the commands
+"   `EasyDiffMergeAllRight` and `EasyDiffMergeAllLeft`
 " - For convenience (not essential to EasyDiff operations), these additional
 "   default mappings are provided: `3<End>` to toggle 'linematch' diffopt;
 "   `4<End>` to toggle 'set number'; `5<End>` to toggle 'report' between 0 and
@@ -98,10 +104,11 @@
 " ‾‾‾‾‾ ‾‾‾‾‾‾‾‾ ‾‾‾ ‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾
 " - EasyDiff prefixes window numbers to every diff window's statusline. This
 "   number is used to address the **Target** and **Operating windows**, by a
-"   simple encoding in the count to the merge commands, as described below.
-" - In 2-way diff, count need not be specified, and the command decides the
-"   direction of Merge, with the current diff window as the **Operating
-"   window**, and the other diff window as the **Target window**.
+"   simple encoding in the count to the merge commands.
+"
+" - In 2-way diff (2 diff windows), count need not be specified, and the command
+"   decides the direction of Merge, with the current diff window as the
+"   **Operating window**, and the other diff window as the **Target window**.
 "
 "   For example, if 5 is the current window, and 2 the other diff window:
 "
@@ -110,13 +117,18 @@
 "	<Right>		from **Target**(2) to **Operating**(5)		:diffget is executed in 5
 "	<Left>		to **Target**(2) from **Operating**(5)		:diffput is executed in 5
 "
-" - In n-way diff (3 or more diff windows) `EasyDiffMergeDiffRight` (`<Right>`)
-"   merges from the **Target window** to the **Operating window** (so :diffget
-"   is executed in the **Operating window**). `EasyDiffMergeDiffLeft`
-"   (`<Right>`) merges to the **Target window** from the **Operating window**
-"   (so :diffput is executed in the **Operating window**).
+" - In n-way diff (3 or more diff windows), `EasyDiffMergeDiffRight` (`<Right>`)
+"   merges the **current** Diff from the **Target window** to the **Operating
+"   window** by executing :diffget in the **Operating window**;
+"   `EasyDiffMergeDiffLeft` (`<Left>`) merges the **current** Diff to the
+"   **Target window** from the **Operating window** by executing :diffput in the
+"   **Operating window**. Similarly, `EasyDiffMergeAllRight` (`<S-Right>`)
+"   merges **all** Diffs from the **Target window** to the **Operating window**
+"   by executing :diffget in the **Operating window**; `EasyDiffMergeAllLeft`
+"   (`<S-Left>`) merges **all** Diffs to the **Target window** from the
+"   **Operating window** by executing :diffput in the **Operating window**.
 "
-"   A count to the merge commands can specify the **Target** and **Operating
+" - The count to the Merge commands specifies the **Target** and **Operating
 "   window** numbers, as follows:
 "
 "	Count			**Target window**		**Operating window**
@@ -153,14 +165,18 @@
 "   `g:easydiff_stay_on_diff`, will cause cursor to move correspondingly in the
 "   current window due to cursorbind.
 "
+" - Whether or not a Merge command succeeds, the command and its count are
+"   saved. The saved command with count is repeated by `EasyDiffRepeatMerge`
+"   (`<Enter>`).
+"
 " Deleting Diff in current window {{{2
 " ‾‾‾‾‾‾‾‾ ‾‾‾‾ ‾‾ ‾‾‾‾‾‾‾ ‾‾‾‾‾‾
 " - `EasyDiffDeleteDiffInCurrentWindow` (`<Delete>`) deletes the Diff **only**
 "   in the current window. If the deleted Diff is adjacent to an existing
 "   Filler, Vim/Neovim combines the new and existing Fillers into a single,
 "   larger Diff. Then the new larger Diff may be further merged with another
-"   window using `EasyDiffMergeDiffLeft` (`<Left>`) or `EasyDiffMergeDiffRight`
-"   (`<Right>`).
+"   window using `EasyDiffMergeDiffLeft` (`<Left>`), `EasyDiffMergeDiffRight`
+"   (`<Right>`) or `EasyDiffRepeatMerge` (`<Enter>`).
 
 " Deleting Diff in all windows {{{2
 " ‾‾‾‾‾‾‾‾ ‾‾‾‾ ‾‾ ‾‾‾ ‾‾‾‾‾‾‾
@@ -217,10 +233,11 @@
 " ‾‾‾‾‾‾‾‾‾‾‾
 " - Vim and Neovim support up to 8 diff windows in a tab, though there is no
 "   limitation on the number of non-diff windows.
-" - EasyDiff tracks edits (merges/deletes) performed using
-"   `EasyDiffMergeDiffRight` (`<Right>`), `EasyDiffMergeDiffLeft` (`<Left>`),
-"   `EasyDiffDeleteDiffInCurrentWindow` (`<Delete>`) or
-"   `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`), allowing them to be
+" - EasyDiff tracks edits (merges/deletes) due to `EasyDiffMergeDiffRight`
+"   (`<Right>`), `EasyDiffMergeDiffLeft` (`<Left>`), `EasyDiffMergeAllRight`
+"   (`<S-Right>`), `EasyDiffMergeAllLeft` (`<S-Left>`), `EasyDiffRepeatMerge`
+"   (`<Enter>`), `EasyDiffDeleteDiffInCurrentWindow` (`<Delete>`) or
+"   `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`). These edits may be
 "   repeatedly undone using `EasyDiffUndo` (`<Backspace>`). But manual edits
 "   that change changenr, will reset this edit tracking.
 " - Non-zero 'wrap' could affect the alignment between the vertically split diff
@@ -452,9 +469,12 @@ let s:editor_version = ''
 " grouped:false, marking where the compound undo should stop.
 " Undo() only succeeds if the buffer is still at the changenr.
 let t:easydiff_undo_stack = []
-" The following are set by s:DiffStateValid():
-" used by MergeDiff() to detect 2-way diff
+" set by s:DiffStateValid() and used by MergeDiffDispatcher() to detect 2-way diff
 let t:easydiff_windows = 0
+" set and used by MergeDiffDispatcher() to repeat the previous Merge command
+let t:easydiff_merge_repeat_count = 0
+let t:easydiff_merge_repeat_right = v:false
+let t:easydiff_merge_repeat_all = v:false
 " used instead of winnr(), by various functions
 let t:easydiff_curwinnr = 0
 " used for '#' (or any other valid diff window), by MergeDiff() and StayOnDiff()
@@ -874,7 +894,7 @@ endfunction
 " curwinid	: id of window from where it is invoked
 " changed_winid : id of window where the edit was made
 " group(boolean): whether the edit should be grouped with another edit (used
-"                 for atomic undo of two edits made by <S-Delete>
+"                 for atomic undo of two edits made by <S-Delete>)
 function! s:RecordEdit(curwinid, changed_winid, group) abort
 	let changenr = a:curwinid == a:changed_winid ? changenr() : s:Workaround2_changenr(a:changed_winid)
 	call add(t:easydiff_undo_stack, {'winid': a:changed_winid, 'changenr': changenr, 'grouped': a:group,})
@@ -895,18 +915,39 @@ endfunction
 
 " MergeDiffDispatcher {{{1
 " Dispatcher for s:MergeDiff()
-" right	: Merge away from (v:true), or towards (v:false) the target window
-function! s:MergeDiffDispatcher(right) abort
-	let spec = v:count1
+" count	: Encoding of the target and operating window numbers
+" right(boolean): Merge away from (v:true), or towards (v:false) target window
+" all(boolean): Merge all Diffs (v:true), or only the current Diff (v:false)
+function! s:MergeDiffDispatcher(count, right, all) abort
+	if a:count == 0
+		if t:easydiff_merge_repeat_count
+			let spec = t:easydiff_merge_repeat_count
+			let right = t:easydiff_merge_repeat_right
+			let all = t:easydiff_merge_repeat_all
+		else
+			echo 'No previous Merge command to repeat'
+			return v:false
+		endif
+	else
+		let spec = a:count
+		let right = a:right
+		let all = a:all
+		" Intentionally saving repeat count and right before validation,
+		" allowing the user to change the window etc. on error and then
+		" repeat.
+		let t:easydiff_merge_repeat_count = a:count
+		let t:easydiff_merge_repeat_right = a:right
+		let t:easydiff_merge_repeat_all = a:all
+	endif
+
 	if !s:DiffStateValid()
 		return v:false
 	endif
 
-	let l:right = a:right
-	" The spec unambiguously encodes target and operating window numbers
-	" (upto 99) as follows: If it has 1 digit, the it represents the target
-	" window number, and the current window is assumed to be the operating
-	" window. If it has 2 digits, the first/second digits represent the
+	" spec unambiguously encodes target and operating window numbers (upto
+	" 99) as follows: If it has 1 digit, the it represents the target window
+	" number, and the current window is assumed to be the operating window.
+	" If it has 2 digits, the first/second digits represent the
 	" target/operating window numbers. If it has 3 or 4 digits, the last two
 	" digits represent the operating window number and the remaining leading
 	" digits represent the target window number.
@@ -916,7 +957,7 @@ function! s:MergeDiffDispatcher(right) abort
 			" Simple directional merge for 2-way diff
 			let targetwinnr = t:easydiff_otherwinnr
 			if operwinnr < targetwinnr
-				let l:right = !a:right
+				let right = !right
 			endif
 		else
 			let targetwinnr = spec
@@ -962,7 +1003,7 @@ function! s:MergeDiffDispatcher(right) abort
 		execute 'noautocmd ' . operwinnr . 'wincmd w'
 	endif
 	let t:easydiff_otherwinnr = targetwinnr
-	call s:MergeDiff(targetwinnr, operwinnr, l:right)
+	call s:MergeDiff(targetwinnr, operwinnr, right, all)
 	if restorewinnr
 		" Restore current window
 		execute 'noautocmd ' . restorewinnr . 'wincmd w'
@@ -974,7 +1015,7 @@ endfunction
 " Helper for MergeDiff() and DeleteDiffInAllWindows(). Find the range of lines
 " in other window corresponding to the Filler before/after in current window.
 " otherwinid : id of other window
-" before : whether the filler is before current line
+" before(boolean) : whether the filler is before current line
 " winstart : screen row of filler start
 " Returns the array with start, end lines in the range.
 function! s:RangeCorrespondingToFiller(otherwinid, before, winstart) abort
@@ -1022,10 +1063,18 @@ endfunction
 " Merge the current Diff
 " otherwinnr : the target window for the merge
 " curwinnr : the operating (current) window for the merge
-" right(boolean): Whether the merge away or towards the other window.
-function! s:MergeDiff(otherwinnr, curwinnr, right) abort
+" right(boolean): Merge away from (v:true) or towards (v:false) the other window
+" all(boolean): Merge all the Diffs (v:true) or only the current Diff (v:false)
+function! s:MergeDiff(otherwinnr, curwinnr, right, all) abort
 	let curwinid = win_getid(a:curwinnr)
 	let otherwinid = win_getid(a:otherwinnr)
+
+	if a:all
+		" Operation can be performed from the current window
+		let operwinid = curwinid
+		let action = printf('noautocmd silent 0,$+1%s %d', (a:right ? 'diffget' : 'diffput'), winbufnr(a:otherwinnr))
+	else " START: a:all == v:false
+
 	let curline = line('.')
 	let linematch = s:LinematchEnabled()
 	let filler_before = s:RepresentsFillerBefore(curline)
@@ -1123,6 +1172,7 @@ function! s:MergeDiff(otherwinnr, curwinnr, right) abort
 		" See 'Implementation Notes' NOTE2
 		let action = printf('noautocmd silent %d,%d%s %d', otherstart, otherend, (a:right ? 'diffput' : 'diffget'), winbufnr(a:curwinnr))
 	endif
+	endif " END: a:all == v:false
 
 	if a:right
 		let changed_winid = curwinid
@@ -1892,8 +1942,11 @@ function! s:WithLazyRedraw(Fn, ...) abort
 endfunction
 
 " EasyDiff Commands {{{1
-command! EasyDiffMergeDiffRight			call s:WithLazyRedraw(function('s:MergeDiffDispatcher'), v:true)
-command! EasyDiffMergeDiffLeft			call s:WithLazyRedraw(function('s:MergeDiffDispatcher'), v:false)
+command! EasyDiffMergeDiffRight			call s:WithLazyRedraw(function('s:MergeDiffDispatcher'), v:count1, v:true, v:false)
+command! EasyDiffMergeDiffLeft			call s:WithLazyRedraw(function('s:MergeDiffDispatcher'), v:count1, v:false, v:false)
+command! EasyDiffMergeAllRight			call s:WithLazyRedraw(function('s:MergeDiffDispatcher'), v:count1, v:true, v:true)
+command! EasyDiffMergeAllLeft			call s:WithLazyRedraw(function('s:MergeDiffDispatcher'), v:count1, v:false, v:true)
+command! EasyDiffRepeatMerge			call s:WithLazyRedraw(function('s:MergeDiffDispatcher'), 0, v:false, v:false)
 command! EasyDiffDeleteDiffInCurrentWindow	call s:WithLazyRedraw(function('s:DeleteDiffInCurrentWindow'))
 command! EasyDiffDeleteDiffInAllWindows		call s:WithLazyRedraw(function('s:DeleteDiffInAllWindows'))
 command! EasyDiffUndo				call s:WithLazyRedraw(function('s:Undo'))
@@ -1914,6 +1967,9 @@ command! EasyDiffToggleStayOnDiff		call s:WithLazyRedraw(function('s:ToggleSetti
 let s:easydiff_default_mappings = [
       \ {'key': '<Right>',    'map': '<Cmd>EasyDiffMergeDiffRight<CR>',     'mode': 'n',   'noremap': 'nore'},
       \ {'key': '<Left>',     'map': '<Cmd>EasyDiffMergeDiffLeft<CR>',      'mode': 'n',   'noremap': 'nore'},
+      \ {'key': '<S-Right>',  'map': '<Cmd>EasyDiffMergeAllRight<CR>',      'mode': 'n',   'noremap': 'nore'},
+      \ {'key': '<S-Left>',   'map': '<Cmd>EasyDiffMergeAllLeft<CR>',       'mode': 'n',   'noremap': 'nore'},
+      \ {'key': '<Enter>',    'map': '<Cmd>EasyDiffRepeatMerge<CR>',        'mode': 'n',   'noremap': 'nore'},
       \ {'key': '<Del>',      'map': '<Cmd>call <SID>DeleteAction()<CR>',   'mode': 'n',   'noremap': 'nore'},
       \ {'key': '<S-Del>',    'map': '2<Del>',                              'mode': 'n',   'noremap': '' },
       \ {'key': '<BS>',       'map': '<Cmd>EasyDiffUndo<CR>',               'mode': 'n',   'noremap': 'nore'},
