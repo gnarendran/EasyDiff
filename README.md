@@ -19,8 +19,10 @@
 * **Operating window** refers to the diff window where the :diffget and :diffput commands are executed
 * **Target window** refers to the diff window containing the other buffer whose number will be specified as argument to :diffget or :diffput.
 * A Merge from **Target window** to **Operating window** copies text in the current Diff from the former to the latter. It is achieved by issuing :diffget in the **Operating window**. If the Diff includes a filler in the **Target window**, this Merge deletes the corresponding text in the **Operating window**.
-* A Merge to **Target window** from **Operating window** copies text in the current Diff to the former from the latter. It is achieved by issuing :diffput in the **Operating window**. If the Diff includes a filler in the **Operating window**, this Merge deletes the the corresponding text in the **Target window**.
+* A Merge to **Target window** from **Operating window** copies text in the current Diff to the former from the latter. It is achieved by issuing :diffput in the **Operating window**. If the Diff includes a filler in the **Operating window**, this Merge deletes the corresponding text in the **Target window**.
+* **Diff Text** is the portion of a line within a changed Diff that Vim highlights as `DiffText` or `DiffTextAdd` in the current window, i.e. the characters that differ from the other diff windows.
 * The default key mappings for the commands are shown in brackets.
+
 ---
 ## Features
 
@@ -31,6 +33,7 @@
 * `EasyDiffUndo` (`<Backspace>`) undoes the merges and deletes across window boundaries, independent of the current window. It atomically undoes simultaneous deletes in all diff windows performed by a `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`).
 * Supports navigation within a Diff (Start, End of a Diff) with the commands `EasyDiffJumpToDiffStart` (`<PageUp>`) and `EasyDiffJumpToDiffEnd` (`<PageDown>`).
 * Supports navigation between Diffs (First, Last, Previous, Next) with the commands `EasyDiffJumpToFirstDiff` (`<Home>`), `EasyDiffJumpToLastDiff` (`<End>`), `EasyDiffJumpToPreviousDiff` (`<Up>`) and `EasyDiffJumpToNextDiff` (`<Down>`).
+* Supports navigation between the Diff Text segments within the current line with the commands `EasyDiffJumpToPreviousDiffText` (`<S-Up>`) and `EasyDiffJumpToNextDiffText` (`<S-Down>`).
 * Supports navigation between diff windows with the command `EasyDiffJumpToWindow` (`<Space>`) and `EasyDiffJumpToAlternateWindow` (`<S-Home>`).
 * Handles all possible configurations of Diffs. When the cursor line represents multiple Diffs (previous filler, changed/added or EOF filler), the user is prompted to identify the Diff for merge/delete operations.
 * Automatically adapts to `diffopt+=linematch:{n}`, handling both grouped and split diffs transparently.
@@ -66,6 +69,8 @@ source /path/to/EasyDiff.vim
 | `EasyDiffJumpToLastDiff` | `<End>` | Jump to the **last** Diff *(normal and visual modes)* |
 | `EasyDiffJumpToPreviousDiff` | `<Up>` | Jump to the **previous** Diff *(accepts count; normal and visual modes)* |
 | `EasyDiffJumpToNextDiff` | `<Down>` | Jump to the **next** Diff *(accepts count; normal and visual modes)* |
+| `EasyDiffJumpToPreviousDiffText` | `<S-Up>` | Jump to the **previous** Diff Text in the current line *(accepts count; normal and visual modes)*. See [Jumping to Diff Text within a line](#jumping-to-diff-text-within-a-line) |
+| `EasyDiffJumpToNextDiffText` | `<S-Down>` | Jump to the **next** Diff Text in the current line *(accepts count; normal and visual modes)*. See [Jumping to Diff Text within a line](#jumping-to-diff-text-within-a-line) |
 | `EasyDiffJumpToWindow` | `<Space>` | Move cursor to a specific diff window *(accepts count; normal mode)*. See [Jumping to a diff window](#jumping-to-a-diff-window) |
 | `EasyDiffJumpToAlternateWindow` | `<S-Home>` | Move cursor to the alternate window *(normal mode)*. See [Jumping to alternate window](#jumping-to-alternate-window) |
 | `EasyDiffToggleStayOnDiff` | `<S-End>` | Toggles the `g:easydiff_stay_on_diff` variable between `1` (default) and `0` *(normal mode)*. See [g:easydiff_stay_on_diff](#geasydiff_stay_on_diff) |
@@ -75,12 +80,12 @@ source /path/to/EasyDiff.vim
 
 > * The default key bindings may be disabled by setting the variable `let g:easydiff_enable_default_mappings = 0` and mapping custom alternatives to the commands directly; for example, this uses `<Leader>h` instead of the default `<F1>`: `noremap <Leader>h <Cmd>EasyDiffHelp<CR>`. It is also possible to retain the default mappings but only customize some of them in `s:easydiff_default_mappings` in EasyDiff.vim
 > * The default key bindings are restricted to the diffed buffers. Preexisting key bindings are restored when diff is disabled.
-> * Other key bindings are not affected. Particularly, `h`/`j`/`k`/`l`/`<C-f>`/`<C-b>`/`0`/`$`/`x`/`w`/`b`/`+` continue to provide the original functions of `<Left>`/`<Down>`/`<Up>`/`<Right>`,`<Space>`/`<PageDown>`/`<PageUp>`/`<Home>`/`<End>`/`<Delete>`/`<S-Right>`/`<S-Left>`/`<Enter>`.
-> * If the terminal does not support the shifted default key bindings `<S-Home>`, `<S-Delete>` and `<S-End>`, default alternatives `2<Home>`, `2<Delete>` and `2<End>` may be used. In the case of `<S-Right>` and `<S-Left>` the user may setup alternative mappings for the commands `EasyDiffMergeAllRight` and `EasyDiffMergeAllLeft`.
-
+> * Other key bindings are not affected. Particularly, `h`/`j`/`k`/`l`/`<C-f>`/`<C-b>`/`0`/`$`/`x`/`w`/`b`/`+` continue to provide the original functions of `<Left>`/`<Down>`/`<Up>`/`<Right>`,`<Space>`/`<PageDown>`,`<S-Down>`/`<PageUp>`,`<S-Up>`/`<Home>`/`<End>`/`<Delete>`/`<S-Right>`/`<S-Left>`/`<Enter>`.
+> * If the terminal does not support the shifted default key bindings `<S-Home>`, `<S-Delete>` and `<S-End>`, default alternatives `2<Home>`, `2<Delete>` and `2<End>` may be used. In the case of `<S-Right>`, `<S-Left>`, `<S-Up>` and `<S-Down>`, the user may setup alternative mappings for the commands `EasyDiffMergeAllRight`, `EasyDiffMergeAllLeft`, `EasyDiffJumpToPreviousDiffText` and `EasyDiffJumpToNextDiffText`.
 > * For convenience (not essential to EasyDiff operations), these additional default mappings are provided: `3<End>` to toggle 'linematch' diffopt; `4<End>` to toggle 'set number'; `5<End>` to toggle 'report' between 0 and the saved value (or 2).
 > * A **Diff** is a contiguous region identified by Vim's diff engine. It may consist of one or more changed, added, or filler regions. For example, in 2-way diff, to delete lines in the right window that correspond to filler lines in the left window, invoke `EasyDiffMergeDiffRight` (`<Right>`). EasyDiff automatically executes `diffput` (or `diffget` from the other window) to produce the expected result.
 > * At start, the cursor is automatically placed on the first Diff in all diff windows.
+> * All successful jump commands leave a mark, so `` `` `` returns to the previous position.
 
 ### Merge commands and window selection
 * EasyDiff prefixes window numbers to every diff window's statusline. This number is used to address the **Target** and **Operating windows**, by a simple encoding in the count to the Merge commands.
@@ -137,6 +142,15 @@ Whether or not a Merge command succeeds, the command and its count are saved. Th
 
 ### Undoing last merge or delete
 `EasyDiffUndo` (`<Backspace>`) undoes merges and deletes across window boundaries. It atomically undoes all the deletions in diff windows performed by a single `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`). To only undo one of those deletes, one may manually undo using Vim/Neovim's native 'u', but that will reset EasyDiff's undo tracking.
+
+### Jumping to Diff Text within a line
+`EasyDiffJumpToNextDiffText` (`<S-Down>`) moves the cursor to the **start** of the next **Diff Text** in the line, and `EasyDiffJumpToPreviousDiffText` (`<S-Up>`) to the **end** of the previous one. So by using these commands suitably, one can jump to both the start and the end of every segment. For example, assuming that the first and last characters of the line are not Diff Text themselves:
+* To find the end of the first segment, press `02<S-Down><S-Up>` (`0` moves to the start of the line, `2<S-Down>` to the start of the second segment, and `<S-Up>` back to the end of the first).
+* To find the start of the last segment, press `$2<S-Up><S-Down>` (`$` moves to the end of the line, `2<S-Up>` to the end of the second-last segment, and `<S-Down>` forward to the start of the last).
+* To find the end of the next segment, press `2<S-Down><S-Up>`.
+* If the line has only one segment, `0<S-Down>` and `$<S-Up>` find its start and end respectively.
+
+If the line has no next or previous Diff Text, a message is shown and the cursor does not move. Only text that exists in the current window is navigable. Text that was deleted relative to the other window has no characters here and is skipped; it appears as Diff Text (`DiffTextAdd`) in the other window, so switch windows and inspect it there.
 
 ### Jumping to a diff window
 `EasyDiffJumpToWindow` (`<Space>`) accepts a count specifying the diff window to which the cursor should move. For example, `3<Space>` moves the cursor to the corresponding line in diff window 3; once there, it moves the cursor according to `g:easydiff_stay_on_diff`. Vim/Neovim's native `[winnr]<C-w>w` could instead be used to switch windows without readjusting the cursor position.

@@ -47,8 +47,11 @@
 " - A Merge to **Target window** from **Operating window** copies text in the
 "   current Diff to the former from the latter. It is achieved by issuing
 "   :diffput in the **Operating window**. If the Diff includes a filler in the
-"   **Operating window**, Merge deletes the the corresponding text in the
+"   **Operating window**, Merge deletes the corresponding text in the
 "   **Target window**
+" - **Diff Text** is the portion of a line within a changed Diff that Vim
+"   highlights as `DiffText` or `DiffTextAdd` in the current window, i.e. the
+"   characters that differ from the other diff windows.
 " - The default key mappings for the commands are shown in brackets.
 "
 " Commands and Default Key Bindings {{{1
@@ -69,6 +72,8 @@
 "	`EasyDiffJumpToLastDiff`		`<End>`		Jump to the **last** Diff *(normal and visual modes)*
 "	`EasyDiffJumpToPreviousDiff`		`<Up>`		Jump to the **previous** Diff *(accepts count; normal and visual modes)*
 "	`EasyDiffJumpToNextDiff`		`<Down>`	Jump to the **next** Diff *(accepts count; normal and visual modes)*
+"	`EasyDiffJumpToPreviousDiffText`	`<S-Up>`	Jump to the **previous** Diff Text in the current line *(accepts count; normal and visual modes)*. See 'Jumping to Diff Text within a line'
+"	`EasyDiffJumpToNextDiffText`		`<S-Down>`	Jump to the **next** Diff Text in the current line *(accepts count; normal and visual modes)*. See 'Jumping to Diff Text within a line'
 "	`EasyDiffJumpToWindow`			`<Space>`	Move cursor to a specific diff window *(accepts count; normal mode)*. See 'Jumping to a diff window'
 "	`EasyDiffJumpToAlternateWindow`		`<S-Home>`	Move cursor to the alternate window *(normal mode)*. See 'Jumping to alternate window'
 "	`EasyDiffToggleStayOnDiff`		`<S-End>`	Toggles the `g:easydiff_stay_on_diff` variable between `1` (default) and `0` *(normal mode)*. See 'g:easydiff_stay_on_diff'
@@ -87,18 +92,21 @@
 " - Other key bindings are not affected. Particularly,
 "   `h`/`j`/`k`/`l`/`<C-f>`/`<C-b>`/`0`/`$`/`x`/`w`/`b`/`+` continue to provide
 "   the original functions of
-"   `<Left>`/`<Down>`/`<Up>`/`<Right>`,`<Space>`/`<PageDown>`/`<PageUp>`/`<Home>`/`<End>`/`<Delete>`/`<S-Right>`/`<S-Left>`/`<Enter>`.
+"   `<Left>`/`<Down>`/`<Up>`/`<Right>`,`<Space>`/`<PageDown>`,`<S-Down>`/`<PageUp>`,`<S-Up>`/`<Home>`/`<End>`/`<Delete>`/`<S-Right>`/`<S-Left>`/`<Enter>`.
 " - If the terminal does not support the shifted default key bindings
 "   `<S-Home>`, `<S-Delete>` and `<S-End>`, default alternatives `2<Home>`,
-"   `2<Delete>` and `2<End>` may be used. In the case of `<S-Right>` and
-"   `<S-Left>` the user may setup alternative mappings for the commands
-"   `EasyDiffMergeAllRight` and `EasyDiffMergeAllLeft`
+"   `2<Delete>` and `2<End>` may be used. In the case of `<S-Right>`,
+"   `<S-Left>`, `<S-Up>` and `<S-Down>`, the user may setup alternative mappings
+"   for the commands `EasyDiffMergeAllRight`, `EasyDiffMergeAllLeft`,
+"   `EasyDiffJumpToPreviousDiffText` and `EasyDiffJumpToNextDiffText`.
 " - For convenience (not essential to EasyDiff operations), these additional
 "   default mappings are provided: `3<End>` to toggle 'linematch' diffopt;
 "   `4<End>` to toggle 'set number'; `5<End>` to toggle 'report' between 0 and
 "   the saved value (or 2).
 " - At start, the cursor is automatically placed on the first Diff in all diff
 "   windows.
+" - All successful jump commands leave a mark, so `` returns to the previous
+"   position.
 "
 " Merge commands and window selection {{{2
 " ‾‾‾‾‾ ‾‾‾‾‾‾‾‾ ‾‾‾ ‾‾‾‾‾‾ ‾‾‾‾‾‾‾‾‾
@@ -191,6 +199,30 @@
 "   by a single `EasyDiffDeleteDiffInAllWindows` (`<S-Delete>`). To only undo
 "   one of those deletes, one may manually undo using Vim/Neovim's native 'u',
 "   but that will reset EasyDiff's undo tracking.
+
+" Jumping to Diff Text within a line {{{2
+" ‾‾‾‾‾‾‾ ‾‾ ‾‾‾‾ ‾‾‾‾ ‾‾‾‾‾‾ ‾ ‾‾‾‾
+" `EasyDiffJumpToNextDiffText` (`<S-Down>`) moves the cursor to the **start** of
+" the next **Diff Text** in the line, and `EasyDiffJumpToPreviousDiffText`
+" (`<S-Up>`) to the **end** of the previous one. So by using these commands
+" suitably, one can jump to both the start and the end of every segment. For
+" example, assuming that the first and last characters of the line are not Diff
+" Text themselves:
+" - To find the end of the first segment, press `02<S-Down><S-Up>` (`0` moves
+"   to the start of the line, `2<S-Down>` to the start of the second segment,
+"   and `<S-Up>` back to the end of the first).
+" - To find the start of the last segment, press `$2<S-Up><S-Down>` (`$` moves
+"   to the end of the line, `2<S-Up>` to the end of the second-last segment,
+"   and `<S-Down>` forward to the start of the last).
+" - To find the end of the next segment, press `2<S-Down><S-Up>`.
+" - If the line has only one segment, `0<S-Down>` and `$<S-Up>` find its start
+"   and end respectively.
+"
+" If the line has no next or previous Diff Text, a message is shown and the
+" cursor does not move. Only text that exists in the current window is
+" navigable. Text that was deleted relative to the other window has no
+" characters here and is skipped; it appears as Diff Text (`DiffTextAdd`) in the
+" other window, so switch windows and inspect it there.
 
 " Jumping to a diff window {{{2
 " ‾‾‾‾‾‾‾ ‾‾ ‾ ‾‾‾‾ ‾‾‾‾‾‾
@@ -456,6 +488,11 @@
 "   thought that the cursor should track the changes to the Diffs, and not be
 "   tied to the previous position in the current window. This implementation
 "   does not restore cursor.
+" - NOTE8: Within a Diff line, there could be one or more segments with
+"   attributes DiffText (for changed text), DiffTextAdd (for added text) and
+"   DiffChange (for unchanged text). But Vim/Neovim do not present a Filler or
+"   provide any other indication for deleted text (corresponding to DiffTextAdd
+"   in the same line in another diff window).
 
 " Variables {{{1
 let s:thisfile = expand('<sfile>:p')
@@ -1781,6 +1818,73 @@ function! s:JumpToNextDiff(verbose) abort
 	return v:true
 endfunction
 
+" JumpToDiffTextInLine {{{1
+" Jump to next/previous diff text (changed/added) in the current line. Cursor is
+" positioned at the end of the diff text for a previous jump, and at its start
+" for a next jump. This allows finding both boundaries by executing next and
+" previous jumps in succession.
+" See 'Implementation Notes' NOTE8. A cursor position could correspond to
+" changed text in one window as well as added text in another window, and so a
+" DiffText could itself contain a deletion point. For this reason, we restrict
+" the jumps to DiffText and DiffTextAdd (which are highlighted as well), and do
+" not attempt to identify and jump to deletion points (corresponding to
+" DiffTextAdd in another window).
+" next(boolean): Whether to jump to the next or previous diff text
+" Returns v:true if a jump was successful, v:false otherwise.
+function! s:JumpToDiffTextInLine(next) abort
+	let repeat = v:count1
+	let pos = getcurpos()
+	let col = pos[2]
+
+	if a:next
+		let move = 1
+		let endcol = col('$')
+		if endcol > 1
+			let endcol -= 1
+		endif
+		" In visual mode or with virtualedit=onemore, col can be exactly
+		" col('$') and so should be clamped:
+		if col > endcol
+			let col = endcol
+		endif
+	else
+		let move = -1
+		let endcol = 1
+	endif
+
+	" See 'Implementation Notes' Workaround4.
+	for winnr in range(1, winnr('$'))
+		if winnr != winnr() && getwinvar(winnr, '&diff')
+			call s:Workaround4_diff_hlID(win_getid(winnr))
+			break
+		endif
+	endfor
+
+	" Increment col till a different attribute that is DiffText.*, is found.
+	let prevattr = synIDattr(diff_hlID(pos[1], col), 'name')
+	while col != endcol
+		let col += move
+		let attr = synIDattr(diff_hlID(pos[1], col), 'name')
+		if attr ==# prevattr
+			continue
+		endif
+		if attr ==# 'DiffText' || attr ==# 'DiffTextAdd'
+			let repeat -= 1
+			if !repeat
+				" mark old pos
+				normal! m`
+				" jump to new position (also sets curswant)
+				call cursor(pos[1], col)
+				echo 'At ' . attr
+				return v:true
+			endif
+		endif
+		let prevattr = attr
+	endwhile
+	call s:Message('Line has no ' . (a:next ? 'next' : 'previous') . ' Diff Text')
+	return v:false
+endfunction
+
 " DeleteAction {{{1
 " Overloaded <Delete> with preceding count
 function! s:DeleteAction() abort
@@ -1956,6 +2060,8 @@ command! EasyDiffJumpToFirstDiff		call s:WithLazyRedraw(function('s:JumpToFirstD
 command! EasyDiffJumpToLastDiff			call s:WithLazyRedraw(function('s:JumpToLastDiff'), v:true)
 command! EasyDiffJumpToPreviousDiff		call s:WithLazyRedraw(function('s:JumpToPreviousDiff'), v:true)
 command! EasyDiffJumpToNextDiff			call s:WithLazyRedraw(function('s:JumpToNextDiff'), v:true)
+command! EasyDiffJumpToPreviousDiffText		call s:WithLazyRedraw(function('s:JumpToDiffTextInLine'), v:false)
+command! EasyDiffJumpToNextDiffText		call s:WithLazyRedraw(function('s:JumpToDiffTextInLine'), v:true)
 command! EasyDiffJumpToWindow			call s:WithLazyRedraw(function('s:JumpToWindow'))
 command! EasyDiffJumpToAlternateWindow		call s:WithLazyRedraw(function('s:JumpToAlternateWindow'))
 command! EasyDiffHelp				call s:WithLazyRedraw(function('s:ShowHelp'))
@@ -1965,24 +2071,26 @@ command! EasyDiffToggleStayOnDiff		call s:WithLazyRedraw(function('s:ToggleSetti
 " Single source of truth for EasyDiff default mappings; empty 'mode' is a
 " comma separated list of n,x,s,o modes; empty 'noremap' implies remap.
 let s:easydiff_default_mappings = [
-      \ {'key': '<Right>',    'map': '<Cmd>EasyDiffMergeDiffRight<CR>',     'mode': 'n',   'noremap': 'nore'},
-      \ {'key': '<Left>',     'map': '<Cmd>EasyDiffMergeDiffLeft<CR>',      'mode': 'n',   'noremap': 'nore'},
-      \ {'key': '<S-Right>',  'map': '<Cmd>EasyDiffMergeAllRight<CR>',      'mode': 'n',   'noremap': 'nore'},
-      \ {'key': '<S-Left>',   'map': '<Cmd>EasyDiffMergeAllLeft<CR>',       'mode': 'n',   'noremap': 'nore'},
-      \ {'key': '<Enter>',    'map': '<Cmd>EasyDiffRepeatMerge<CR>',        'mode': 'n',   'noremap': 'nore'},
-      \ {'key': '<Del>',      'map': '<Cmd>call <SID>DeleteAction()<CR>',   'mode': 'n',   'noremap': 'nore'},
-      \ {'key': '<S-Del>',    'map': '2<Del>',                              'mode': 'n',   'noremap': '' },
-      \ {'key': '<BS>',       'map': '<Cmd>EasyDiffUndo<CR>',               'mode': 'n',   'noremap': 'nore'},
-      \ {'key': '<PageUp>',   'map': '<Cmd>EasyDiffJumpToDiffStart<CR>',    'mode': 'n,x', 'noremap': 'nore'},
-      \ {'key': '<PageDown>', 'map': '<Cmd>EasyDiffJumpToDiffEnd<CR>',      'mode': 'n,x', 'noremap': 'nore'},
-      \ {'key': '<Home>',     'map': '<Cmd>call <SID>HomeAction()<CR>',     'mode': 'n,x', 'noremap': 'nore'},
-      \ {'key': '<S-Home>',   'map': '2<Home>',                             'mode': 'n',   'noremap': '' },
-      \ {'key': '<End>',      'map': '<Cmd>call <SID>EndAction()<CR>',      'mode': 'n,x', 'noremap': 'nore'},
-      \ {'key': '<S-End>',    'map': '2<End>',                              'mode': 'n',   'noremap': '' },
-      \ {'key': '<Up>',       'map': '<Cmd>EasyDiffJumpToPreviousDiff<CR>', 'mode': 'n,x', 'noremap': 'nore'},
-      \ {'key': '<Down>',     'map': '<Cmd>EasyDiffJumpToNextDiff<CR>',     'mode': 'n,x', 'noremap': 'nore'},
-      \ {'key': '<Space>',    'map': '<Cmd>EasyDiffJumpToWindow<CR>',       'mode': 'n',   'noremap': 'nore'},
-      \ {'key': '<F1>',       'map': '<Cmd>EasyDiffHelp<CR>',               'mode': 'n',   'noremap': 'nore'},
+      \ {'key': '<Right>',	'map': '<Cmd>EasyDiffMergeDiffRight<CR>',		'mode': 'n',	'noremap': 'nore'	},
+      \ {'key': '<Left>',	'map': '<Cmd>EasyDiffMergeDiffLeft<CR>',		'mode': 'n',	'noremap': 'nore'	},
+      \ {'key': '<S-Right>',	'map': '<Cmd>EasyDiffMergeAllRight<CR>',		'mode': 'n',	'noremap': 'nore'	},
+      \ {'key': '<S-Left>',	'map': '<Cmd>EasyDiffMergeAllLeft<CR>',			'mode': 'n',	'noremap': 'nore'	},
+      \ {'key': '<Enter>',	'map': '<Cmd>EasyDiffRepeatMerge<CR>',			'mode': 'n',	'noremap': 'nore'	},
+      \ {'key': '<Del>',	'map': '<Cmd>call <SID>DeleteAction()<CR>',		'mode': 'n',	'noremap': 'nore'	},
+      \ {'key': '<S-Del>',	'map': '2<Del>',					'mode': 'n',	'noremap': ''		},
+      \ {'key': '<BS>',		'map': '<Cmd>EasyDiffUndo<CR>',				'mode': 'n',	'noremap': 'nore'	},
+      \ {'key': '<PageUp>',	'map': '<Cmd>EasyDiffJumpToDiffStart<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<PageDown>',	'map': '<Cmd>EasyDiffJumpToDiffEnd<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<Home>',	'map': '<Cmd>call <SID>HomeAction()<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<S-Home>',	'map': '2<Home>',					'mode': 'n',	'noremap': ''		},
+      \ {'key': '<End>',	'map': '<Cmd>call <SID>EndAction()<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<S-End>',	'map': '2<End>',					'mode': 'n',	'noremap': ''		},
+      \ {'key': '<Up>',		'map': '<Cmd>EasyDiffJumpToPreviousDiff<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<Down>',	'map': '<Cmd>EasyDiffJumpToNextDiff<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<S-Up>',	'map': '<Cmd>EasyDiffJumpToPreviousDiffText<CR>',	'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<S-Down>',	'map': '<Cmd>EasyDiffJumpToNextDiffText<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<Space>',	'map': '<Cmd>EasyDiffJumpToWindow<CR>',			'mode': 'n',	'noremap': 'nore'	},
+      \ {'key': '<F1>',		'map': '<Cmd>EasyDiffHelp<CR>',				'mode': 'n',	'noremap': 'nore'	},
       \ ]
 
 " DiffModeSetup {{{1
