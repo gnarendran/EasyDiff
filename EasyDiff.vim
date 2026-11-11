@@ -68,6 +68,8 @@
 "	`EasyDiffUndo`				`<Backspace>`	Undo the last merge or delete *(normal mode)*. See 'Undoing last merge or delete'
 "	`EasyDiffJumpToDiffStart`		`<PageUp>`	Jump to the **start** of the current Diff *(normal and visual modes)*
 "	`EasyDiffJumpToDiffEnd`			`<PageDown>`	Jump to the **end** of the current Diff *(normal and visual modes)*
+"	`EasyDiffJumpToDiffTextStart`		`<S-PageUp>`	Jump to the **start** of the current Diff Text *(normal and visual modes)*. See 'Jumping to Diff Text within a line'
+"	`EasyDiffJumpToDiffTextEnd`		`<S-PageDown>`	Jump to the **end** of the current Diff Text *(normal and visual modes)*. See 'Jumping to Diff Text within a line'
 "	`EasyDiffJumpToFirstDiff`		`<Home>`	Jump to the **first** Diff *(normal and visual modes)*
 "	`EasyDiffJumpToLastDiff`		`<End>`		Jump to the **last** Diff *(normal and visual modes)*
 "	`EasyDiffJumpToPreviousDiff`		`<Up>`		Jump to the **previous** Diff *(accepts count; normal and visual modes)*
@@ -94,10 +96,11 @@
 "   the original functions of
 "   `<Left>`/`<Down>`/`<Up>`/`<Right>`,`<Space>`/`<PageDown>`,`<S-Down>`/`<PageUp>`,`<S-Up>`/`<Home>`/`<End>`/`<Delete>`/`<S-Right>`/`<S-Left>`/`<Enter>`.
 " - If the terminal does not support the shifted default key bindings
-"   `<S-Home>`, `<S-Delete>` and `<S-End>`, default alternatives `2<Home>`,
-"   `2<Delete>` and `2<End>` may be used. In the case of `<S-Right>`,
-"   `<S-Left>`, `<S-Up>` and `<S-Down>`, the user may setup alternative mappings
-"   for the commands `EasyDiffMergeAllRight`, `EasyDiffMergeAllLeft`,
+"   `<S-Home>`, `<S-Delete>`, `<S-PageUp>`, `<S-PageDown>` and `<S-End>`,
+"   default alternatives `2<Home>`, `2<Delete>`, `2<PageUp>`, `2<PageDown>` and
+"   `2<End>` may be used. In the case of `<S-Right>`, `<S-Left>`, `<S-Up>` and
+"   `<S-Down>`, the user may setup alternative mappings for the commands
+"   `EasyDiffMergeAllRight`, `EasyDiffMergeAllLeft`,
 "   `EasyDiffJumpToPreviousDiffText` and `EasyDiffJumpToNextDiffText`.
 " - For convenience (not essential to EasyDiff operations), these additional
 "   default mappings are provided: `3<End>` to toggle 'linematch' diffopt;
@@ -202,27 +205,10 @@
 
 " Jumping to Diff Text within a line {{{2
 " ‾‾‾‾‾‾‾ ‾‾ ‾‾‾‾ ‾‾‾‾ ‾‾‾‾‾‾ ‾ ‾‾‾‾
-" `EasyDiffJumpToNextDiffText` (`<S-Down>`) moves the cursor to the **start** of
-" the next **Diff Text** in the line, and `EasyDiffJumpToPreviousDiffText`
-" (`<S-Up>`) to the **end** of the previous one. So by using these commands
-" suitably, one can jump to both the start and the end of every segment. For
-" example, assuming that the first and last characters of the line are not Diff
-" Text themselves:
-" - To find the end of the first segment, press `02<S-Down><S-Up>` (`0` moves
-"   to the start of the line, `2<S-Down>` to the start of the second segment,
-"   and `<S-Up>` back to the end of the first).
-" - To find the start of the last segment, press `$2<S-Up><S-Down>` (`$` moves
-"   to the end of the line, `2<S-Up>` to the end of the second-last segment,
-"   and `<S-Down>` forward to the start of the last).
-" - To find the end of the next segment, press `2<S-Down><S-Up>`.
-" - If the line has only one segment, `0<S-Down>` and `$<S-Up>` find its start
-"   and end respectively.
-"
-" If the line has no next or previous Diff Text, a message is shown and the
-" cursor does not move. Only text that exists in the current window is
-" navigable. Text that was deleted relative to the other window has no
-" characters here and is skipped; it appears as Diff Text (`DiffTextAdd`) in the
-" other window, so switch windows and inspect it there.
+" - Only Diff Text that exists in the current window is navigable. Text that was
+"   deleted relative to the other window has no characters here and is skipped;
+"   it appears as Diff Text (`DiffTextAdd`) in the other window, so switch
+"   windows and inspect it there.
 
 " Jumping to a diff window {{{2
 " ‾‾‾‾‾‾‾ ‾‾ ‾ ‾‾‾‾ ‾‾‾‾‾‾
@@ -1818,12 +1804,27 @@ function! s:JumpToNextDiff(verbose) abort
 	return v:true
 endfunction
 
+" DiffTextBoundary {{{1
+" Helper for s:JumpToDiffTextInLine() and s:JumpToDiffTextBoundary()
+" Assumes that cursor is already inside a Diff Text segment.
+" Returns the column (byte index) of the Diff Text segment's boundary
+" attr: diff attribute of the position from which to search
+" line: line number of the position
+" col: column of the position
+" endcol: end column of search: 1 for start of Diff Text, <end-of-line> for end
+function! s:DiffTextBoundary(attr, line, col, endcol) abort
+	let move = a:col > a:endcol ? -1 : 1
+	let col = a:col
+	while col != a:endcol && a:attr ==# synIDattr(diff_hlID(a:line, col + move), 'name')
+		let col += move
+	endwhile
+	return col
+endfunction
+
 " JumpToDiffTextInLine {{{1
-" Jump to next/previous diff text (changed/added) in the current line. Cursor is
-" positioned at the end of the diff text for a previous jump, and at its start
-" for a next jump. This allows finding both boundaries by executing next and
-" previous jumps in succession.
-" See 'Implementation Notes' NOTE8. A cursor position could correspond to
+" Jump to start of the next/previous diff text (changed/added) in the current
+" line.
+" See 'Implementation Notes' NOTE8: A cursor position could correspond to
 " changed text in one window as well as added text in another window, and so a
 " DiffText could itself contain a deletion point. For this reason, we restrict
 " the jumps to DiffText and DiffTextAdd (which are highlighted as well), and do
@@ -1873,6 +1874,10 @@ function! s:JumpToDiffTextInLine(next) abort
 			if !repeat
 				" mark old pos
 				normal! m`
+				if !a:next
+					" find the start of the Diff Text
+					let col = s:DiffTextBoundary(attr, pos[1], col, endcol)
+				endif
 				" jump to new position (also sets curswant)
 				call cursor(pos[1], col)
 				echo 'At ' . attr
@@ -1885,13 +1890,91 @@ function! s:JumpToDiffTextInLine(next) abort
 	return v:false
 endfunction
 
+" JumpToDiffTextBoundary {{{1
+" Jump to start/end of a Diff Text segment
+" end(boolean): Whether to jump to the end(v:true) or start(v:false) of the Diff
+"               Text
+" Returns v:true if a jump was successful, v:false otherwise.
+function! s:JumpToDiffTextBoundary(end) abort
+	" See 'Implementation Notes' Workaround4.
+	for winnr in range(1, winnr('$'))
+		if winnr != winnr() && getwinvar(winnr, '&diff')
+			call s:Workaround4_diff_hlID(win_getid(winnr))
+			break
+		endif
+	endfor
+
+	let pos = getcurpos()
+	let col = pos[2]
+
+	let attr = synIDattr(diff_hlID(pos[1], col), 'name')
+	if attr !=# 'DiffText' && attr !=# 'DiffTextAdd'
+		call s:Message('Not inside a Diff Text')
+		return v:false
+	endif
+
+	if a:end
+		let endcol = col('$')
+		if endcol > 1
+			let endcol -= 1
+		endif
+		" col('$') in Visual mode/virtualedit has attr DiffChange,
+		" rejected above, so no need to clamp col.
+	else
+		let endcol = 1
+	endif
+
+	let col = s:DiffTextBoundary(attr, pos[1], col, endcol)
+
+	if a:end
+		" col could be the last byte of a multibyte char in which case
+		" to find if this multibyte is at the end of the text segment,
+		" we need to find the first byte of the multibyte before
+		" comparing with pos[2].
+		let line = getline(pos[1])
+		let col = byteidx(line, strchars(strpart(line, 0, col), 1) - 1) + 1
+	endif
+
+	if col == pos[2]
+		call s:Message('Already at the ' . (a:end ? 'end' : 'start') . ' of Diff Text')
+		return v:true
+	endif
+
+	" mark old pos
+	normal! m`
+	" jump to new position (also sets curswant)
+	call cursor(pos[1], col)
+	echo ''
+	return v:true
+endfunction
+
+" PageDownAction {{{1
+" Overloaded <PageDown> with preceding count
+function! s:PageDownAction() abort
+	if v:count1 == 1
+		return s:WithLazyRedraw(function('s:JumpToDiffEnd'), v:true)
+	else
+		return s:WithLazyRedraw(function('s:JumpToDiffTextBoundary'), v:true)
+	endif
+endfunction
+
+" PageUpAction {{{1
+" Overloaded <PageUp> with preceding count
+function! s:PageUpAction() abort
+	if v:count1 == 1
+		return s:WithLazyRedraw(function('s:JumpToDiffStart'), v:true)
+	else
+		return s:WithLazyRedraw(function('s:JumpToDiffTextBoundary'), v:false)
+	endif
+endfunction
+
 " DeleteAction {{{1
 " Overloaded <Delete> with preceding count
 function! s:DeleteAction() abort
 	if v:count1 == 1
-		return s:DeleteDiffInCurrentWindow()
+		return s:WithLazyRedraw(function('s:DeleteDiffInCurrentWindow'))
 	else
-		return s:DeleteDiffInAllWindows()
+		return s:WithLazyRedraw(function('s:DeleteDiffInAllWindows'))
 	endif
 endfunction
 
@@ -1944,9 +2027,9 @@ endfunction
 function! s:HomeAction() abort
 	if v:count1 == 1
 		" v:count1 = 1 (no count) jumps to the first Diff
-		return s:JumpToFirstDiff(v:true)
+		return s:WithLazyRedraw(function('s:JumpToFirstDiff'), v:true)
 	else
-		return s:JumpToAlternateWindow()
+		return s:WithLazyRedraw(function('s:JumpToAlternateWindow'))
 	endif
 endfunction
 
@@ -2023,12 +2106,12 @@ endfunction
 function! s:EndAction() abort
 	if v:count1 == 1
 		" v:count1 = 1 (no count) moves cursor to the last Diff
-		return s:JumpToLastDiff(v:true)
+		return s:WithLazyRedraw(function('s:JumpToLastDiff'), v:true)
 	endif
 	return s:ToggleSetting(v:count1)
 endfunction
 
-" WithLazyredraw {{{1
+" WithLazyRedraw {{{1
 " Helper for various functions, and usable directly as a mapping target (see
 " s:easydiff_default_mappings). Calls a:Fn with 'lazyredraw' set, to hide from the
 " user any intermediate screen updates a:Fn causes (eg. from cursorbind
@@ -2056,6 +2139,8 @@ command! EasyDiffDeleteDiffInAllWindows		call s:WithLazyRedraw(function('s:Delet
 command! EasyDiffUndo				call s:WithLazyRedraw(function('s:Undo'))
 command! EasyDiffJumpToDiffStart		call s:WithLazyRedraw(function('s:JumpToDiffStart'), v:true)
 command! EasyDiffJumpToDiffEnd			call s:WithLazyRedraw(function('s:JumpToDiffEnd'), v:true)
+command! EasyDiffJumpToDiffTextStart		call s:WithLazyRedraw(function('s:JumpToDiffTextBoundary'), v:false)
+command! EasyDiffJumpToDiffTextEnd		call s:WithLazyRedraw(function('s:JumpToDiffTextBoundary'), v:true)
 command! EasyDiffJumpToFirstDiff		call s:WithLazyRedraw(function('s:JumpToFirstDiff'), v:true)
 command! EasyDiffJumpToLastDiff			call s:WithLazyRedraw(function('s:JumpToLastDiff'), v:true)
 command! EasyDiffJumpToPreviousDiff		call s:WithLazyRedraw(function('s:JumpToPreviousDiff'), v:true)
@@ -2079,8 +2164,10 @@ let s:easydiff_default_mappings = [
       \ {'key': '<Del>',	'map': '<Cmd>call <SID>DeleteAction()<CR>',		'mode': 'n',	'noremap': 'nore'	},
       \ {'key': '<S-Del>',	'map': '2<Del>',					'mode': 'n',	'noremap': ''		},
       \ {'key': '<BS>',		'map': '<Cmd>EasyDiffUndo<CR>',				'mode': 'n',	'noremap': 'nore'	},
-      \ {'key': '<PageUp>',	'map': '<Cmd>EasyDiffJumpToDiffStart<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
-      \ {'key': '<PageDown>',	'map': '<Cmd>EasyDiffJumpToDiffEnd<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<PageUp>',	'map': '<Cmd>call <SID>PageUpAction()<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<PageDown>',	'map': '<Cmd>call <SID>PageDownAction()<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
+      \ {'key': '<S-PageUp>',	'map': '2<PageUp>',					'mode': 'n,x',	'noremap': ''		},
+      \ {'key': '<S-PageDown>',	'map': '2<PageDown>',					'mode': 'n,x',	'noremap': ''		},
       \ {'key': '<Home>',	'map': '<Cmd>call <SID>HomeAction()<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
       \ {'key': '<S-Home>',	'map': '2<Home>',					'mode': 'n',	'noremap': ''		},
       \ {'key': '<End>',	'map': '<Cmd>call <SID>EndAction()<CR>',		'mode': 'n,x',	'noremap': 'nore'	},
