@@ -1768,7 +1768,7 @@ function! s:JumpToPreviousDiff(verbose) abort
 	let curline = line('.')
 	if curline == oldline
 		if a:verbose
-			call s:Message('No previous Diff to move to')
+			call s:Message('No previous Diff to jump to')
 		endif
 		if curline != pos[1]
 			call s:CommitCursorMove(pos, pos[1], v:false)
@@ -1793,7 +1793,7 @@ function! s:JumpToNextDiff(verbose) abort
 	let curline = line('.')
 	if pos[1] == curline
 		if a:verbose
-			call s:Message('No next Diff to move to')
+			call s:Message('No next Diff to jump to')
 		endif
 		return v:false
 	endif
@@ -1880,13 +1880,13 @@ function! s:JumpToDiffTextInLine(next) abort
 				endif
 				" jump to new position (also sets curswant)
 				call cursor(pos[1], col)
-				echo 'At ' . attr
+				echo ''
 				return v:true
 			endif
 		endif
 		let prevattr = attr
 	endwhile
-	call s:Message('Line has no ' . (a:next ? 'next' : 'previous') . ' Diff Text')
+	call s:Message('No ' . (a:next ? 'next' : 'previous') . ' Diff Text in current line to jump to')
 	return v:false
 endfunction
 
@@ -1932,11 +1932,16 @@ function! s:JumpToDiffTextBoundary(end) abort
 		" we need to find the first byte of the multibyte before
 		" comparing with pos[2].
 		let line = getline(pos[1])
+		" col is the last byte of the Diff Text. So strpart() give the
+		" line upto the last char (even if it is multibyte) of the Diff
+		" Text. strchars() counts the number of characters. byteidx()
+		" with gives the index of the last char (-1 as it counts from
+		" 0). Then +1 to find the col.
 		let col = byteidx(line, strchars(strpart(line, 0, col), 1) - 1) + 1
 	endif
 
 	if col == pos[2]
-		call s:Message('Already at the ' . (a:end ? 'end' : 'start') . ' of Diff Text')
+		call s:Message('Already at the Diff Text ' . (a:end ? 'end' : 'start'))
 		return v:true
 	endif
 
