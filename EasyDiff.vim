@@ -264,6 +264,10 @@
 " - Non-zero 'scrolloff' is known to affect cursorbind in some cases in both Vim
 "   and Neovim. As cursorbind is essential for correct EasyDiff operations,
 "   EasyDiff executes `setlocal scrolloff=0` in all diff windows.
+" - Vim/Neovim treat a file ending with an EOL identically to one without an EOL
+"   (Ref: :help 'endofline'). Consequently, when two files differ only in the
+"   presence or absence of the final EOL, Vim/Neovim do not identify a
+"   difference in diff mode.
 " - Vim/Neovim suppress messages from :delete when upto 'report' lines are
 "   deleted. But messages from undo or redo (and hence from merges) are not
 "   similarly suppressed. However, in n-way Diff especially, messages from
@@ -1082,6 +1086,34 @@ function! s:RangeCorrespondingToFiller(otherwinid, before, winstart) abort
 	return [start, end]
 endfunction
 
+" WindowsIdentical {{{1
+" Helper for s:MergeDiff.
+" Finds if the buffers into two windows are identical
+" winnr1, winnr2 : winnr() of the two windows
+" Returns v:false if they differ, v:true otherwise.
+function! s:WindowsIdentical(winnr1, winnr2) abort
+	let b1 = winbufnr(a:winnr1)
+	let b2 = winbufnr(a:winnr2)
+
+	" Find the number of lines in the buffers
+	let n1 = getbufinfo(b1)[0].linecount
+	let n2 = getbufinfo(b2)[0].linecount
+
+	if n1 != n2
+		return v:false
+	endif
+
+	let chunk = 1000
+	for start in range(1, n1, chunk)
+		let end = min([start + chunk - 1, n1])
+		if getbufline(b1, start, end) !=# getbufline(b2, start, end)
+			return v:false
+		endif
+	endfor
+
+	return v:true
+endfunction
+
 " MergeDiff {{{1
 " Merge the current Diff
 " otherwinnr : the target window for the merge
@@ -1093,6 +1125,10 @@ function! s:MergeDiff(otherwinnr, curwinnr, right, all) abort
 	let otherwinid = win_getid(a:otherwinnr)
 
 	if a:all
+		if s:WindowsIdentical(a:curwinnr, a:otherwinnr)
+			call s:Message(printf('Nothing to Merge: no difference between operating (%d) and target (%d) windows', a:curwinnr, a:otherwinnr))
+			return v:false
+		endif
 		" Operation can be performed from the current window
 		let operwinid = curwinid
 		let action = printf('noautocmd silent 0,$+1%s %d', (a:right ? 'diffget' : 'diffput'), winbufnr(a:otherwinnr))
@@ -1941,7 +1977,7 @@ function! s:JumpToDiffTextBoundary(end) abort
 	endif
 
 	if col == pos[2]
-		call s:Message('Already at the Diff Text ' . (a:end ? 'end' : 'start'))
+		call s:Message('Already at ' . (a:end ? 'end' : 'start') . ' of Diff Text ')
 		return v:true
 	endif
 
