@@ -21,8 +21,8 @@
 "   present in vertical or horizontal splits.
 " - The diff windows may be set up directly using vim -d, nvim -d, or vimdiff,
 "   or by manually invoking :diffthis.
-" - Requires the default diff options `set cursorbind` and `set diffopt+=filler`
-"   to remain unmodified.
+" - Requires the default diff options `set cursorbind`, `set diffopt+=filler`
+"   and `set foldmethod=diff` to remain unmodified.
 " - When the `diffopt+=linematch:{n}` is specified, for correct alignment Vim
 "   and Neovim expect `{n}` to be greater than the product of the number of diff
 "   windows and the number of lines in the largest diff hunk.
@@ -577,19 +577,14 @@ function! s:ToggleCursor() abort
 	" to F, rather than reaching U corresponding to U. So toggle down-up
 	" with normal jk - but this is possible only when curline is not the
 	" last line. Also when curline is not a Diff, it could be in closed
-	" folds - then we need to open the folds so that j won't skip over them,
-	" and then restore them.
+	" fold (foldlevel is at most 1 with foldmethod=diff) - then we need to
+	" open the fold so that j won't skip over it, and then restore the fold.
 	if curline < line('$')
-		let fold = 0
-		while foldclosed(curline) != -1
-			noautocmd foldopen
-			let fold += 1
-		endwhile
-		noautocmd normal! jk
-		while fold > 0
-			noautocmd foldclose
-			let fold -= 1
-		endwhile
+		if foldclosed(curline) != -1
+			noautocmd normal! zojkzc
+		else
+			noautocmd normal! jk
+		endif
 		return
 	endif
 	" For the last line:

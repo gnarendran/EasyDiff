@@ -8,7 +8,7 @@
 * Requires Vim 9.2 or Neovim 0.12.0 (the tested versions). EasyDiff might work in lower versions, but any issues found in lower versions are out of scope of this plugin.
 * Requires at least two windows in diff mode in the tab. All diff windows in a tab must be in the same row of vertical splits. Non-diff windows may also be present in vertical or horizontal splits.
 * The diff windows may be set up directly using `vim -d`, `nvim -d`, or `vimdiff`, or by manually invoking `:diffthis`.
-* Requires the default diff options `set cursorbind` and `set diffopt+=filler` to remain unmodified.
+* Requires the default diff options `set cursorbind`, `set diffopt+=filler` and `set foldmethod=diff` to remain unmodified.
 * When the `diffopt+=linematch:{n}` is specified, for correct alignment Vim and Neovim expect `{n}` to be greater than the product of the number of diff windows and the number of lines in the largest diff hunk.
 
 ---
